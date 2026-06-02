@@ -22,7 +22,8 @@ program
   .option("-r, --retries <n>", "Number of retries per task")
   .option("-a, --agent <agent>", "Override the default agent for this scan")
   .option("--write-config", "Write scan options to repo config")
-  .action(async (repo: string, options: { concurrency?: string; timeout?: string; retries?: string; agent?: string; writeConfig?: boolean }) => {
+  .option("--non-interactive", "Do not prompt for interactive actions")
+  .action(async (repo: string, options: { concurrency?: string; timeout?: string; retries?: string; agent?: string; writeConfig?: boolean; nonInteractive?: boolean }) => {
     await scanCommand(repo, options);
   });
 

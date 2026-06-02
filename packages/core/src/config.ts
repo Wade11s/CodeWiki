@@ -13,6 +13,8 @@ export const DEFAULT_CONFIG: CodeWikiConfig = {
   },
   scan: {
     interactiveConfig: true,
+    include: [],
+    exclude: [],
   },
 };
 

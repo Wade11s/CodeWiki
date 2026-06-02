@@ -26,8 +26,31 @@ export const AgentConfigSchema = z.object({
   retries: z.number().int().min(0),
 });
 
+export const SkipReasonSchema = z.enum([
+  "binary",
+  "oversized",
+  "generated",
+  "ignored",
+  "parse-unavailable",
+]);
+
+export const SkippedFileSchema = z.object({
+  path: z.string(),
+  reason: SkipReasonSchema,
+  metadata: z.record(z.unknown()).optional(),
+});
+
+export const SkippedFilesArtifactSchema = z.object({
+  schemaVersion: z.string(),
+  snapshotId: z.string(),
+  generatedAt: z.string().datetime(),
+  data: z.array(SkippedFileSchema),
+});
+
 export const ScanConfigSchema = z.object({
   interactiveConfig: z.boolean(),
+  include: z.array(z.string()).optional(),
+  exclude: z.array(z.string()).optional(),
 });
 
 export const CodeWikiConfigSchema = z.object({

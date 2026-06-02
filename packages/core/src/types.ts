@@ -38,8 +38,26 @@ export interface AgentConfig {
   retries: number;
 }
 
+// parse-unavailable is reserved for future use (e.g. unsupported language or parser failure)
+export type SkipReason = "binary" | "oversized" | "generated" | "ignored" | "parse-unavailable";
+
+export interface SkippedFile {
+  path: string;
+  reason: SkipReason;
+  metadata?: Record<string, unknown>;
+}
+
+export interface SkippedFilesArtifact {
+  schemaVersion: string;
+  snapshotId: string;
+  generatedAt: string;
+  data: SkippedFile[];
+}
+
 export interface ScanConfig {
   interactiveConfig: boolean;
+  include?: string[];
+  exclude?: string[];
 }
 
 export interface CodeWikiConfig {
