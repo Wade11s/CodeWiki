@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync, writeFileSync as writeFile } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer } from "node:http";
 import { scanCommand } from "./src/commands/scan.js";
 import { statusCommand } from "./src/commands/status.js";
 import { debugCommand } from "./src/commands/debug.js";
@@ -315,6 +316,7 @@ describe("Site generation fixtures", () => {
 
     cleanup(repo);
   });
+
 });
 
 describe("Serve fixtures", () => {
@@ -337,6 +339,33 @@ describe("Serve fixtures", () => {
     cleanup(repo);
 
     // Prevent unhandled promise rejection
+    serverPromise.catch(() => {});
+  });
+
+  it("blocks path traversal attempts", async () => {
+    const repo = createTempRepo("serve-traversal");
+    addFile(repo, "a.js", "// a\n");
+    await scanCommand(repo, {});
+
+    // Write a secret file outside the site directory
+    const secretPath = join(repo, ".codewiki", "secret.txt");
+    writeFileSync(secretPath, "super-secret");
+
+    const port = 9876;
+    const serverPromise = serveCommand(repo, { port: String(port) });
+
+    // Wait for server to start
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Request with path traversal
+    const res = await fetch(`http://localhost:${port}/../secret.txt`);
+    const body = await res.text();
+
+    // Should NOT serve the secret file — should fall back to index.html
+    expect(body).not.toContain("super-secret");
+    expect(body).toContain("CodeWiki Report"); // from index.html
+
+    cleanup(repo);
     serverPromise.catch(() => {});
   });
 });

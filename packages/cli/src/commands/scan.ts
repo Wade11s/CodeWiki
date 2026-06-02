@@ -153,8 +153,9 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
   const siteResult = generateSite(repoPath);
   if (siteResult.success) {
     console.log(`Site: ${siteResult.siteDir}`);
-  } else {
-    console.error(`Site generation failed:`);
+  }
+  if (siteResult.errors.length > 0) {
+    console.error(`Site generation warnings:`);
     for (const err of siteResult.errors) {
       console.error(`  - ${err}`);
     }
