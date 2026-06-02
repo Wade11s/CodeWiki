@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "skills": {
+    "setup-multica-issue-tracker": {
+      "source": "wade11s/skills",
+      "sourceType": "github",
+      "skillPath": "skills/setup-multica-issue-tracker/SKILL.md",
+      "computedHash": "418d77d5551376b26eda06675a99a3782eb924ed03fc6f863a1ab14ce3b928f9"
+    }
+  }
+}
