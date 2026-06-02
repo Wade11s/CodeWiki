@@ -6,3 +6,4 @@ export * from "./ignore.js";
 export * from "./agent-runner.js";
 export * from "./feature-candidates.js";
 export * from "./error.js";
+export * from "./indexer.js";

@@ -115,6 +115,93 @@ export interface FeatureCandidateGroup {
 
 export type TaskState = "pending" | "running" | "success" | "failed" | "timeout";
 
+// ── Indexer types ──
+
+export type SymbolKind =
+  | "function"
+  | "class"
+  | "interface"
+  | "type"
+  | "enum"
+  | "variable"
+  | "const"
+  | "let"
+  | "method"
+  | "property"
+  | "module"
+  | "arrow_function"
+  | "export"
+  | "unknown";
+
+export interface CodeSymbol {
+  id: string;
+  name: string;
+  kind: SymbolKind;
+  filePath: string;
+  lineStart: number;
+  lineEnd: number;
+  snippet: string;
+  exported: boolean;
+  language: string;
+  parentSymbol?: string;
+}
+
+export interface Import {
+  id: string;
+  source: string;
+  names: string[];
+  filePath: string;
+  lineStart: number;
+  lineEnd: number;
+  snippet: string;
+  isDefault: boolean;
+  isNamespace: boolean;
+  language: string;
+}
+
+export type BlockKind =
+  | "function"
+  | "class"
+  | "interface"
+  | "type"
+  | "enum"
+  | "export"
+  | "import"
+  | "comment"
+  | "unknown";
+
+export interface Block {
+  id: string;
+  kind: BlockKind;
+  name: string;
+  filePath: string;
+  lineStart: number;
+  lineEnd: number;
+  snippet: string;
+  language: string;
+  symbolIds: string[];
+}
+
+export type ModuleType = "package" | "workspace" | "directory";
+
+export interface Module {
+  id: string;
+  name: string;
+  path: string;
+  type: ModuleType;
+  language?: string;
+  files: string[];
+  entryPoints?: string[];
+  dependencies?: string[];
+}
+
+export interface IndexerResult {
+  symbols: CodeSymbol[];
+  imports: Import[];
+  blocks: Block[];
+  modules: Module[];
+}
+
 export interface TaskResult {
   taskId: string;
   exitCode: number;
