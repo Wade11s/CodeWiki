@@ -1259,3 +1259,173 @@ module.exports = router;
     cleanup(repo);
   });
 });
+
+describe("Indexer fixtures", () => {
+  it("indexes TypeScript symbols and imports", async () => {
+    const repo = createTempRepo("indexer-ts");
+    addFile(repo, "src/utils.ts", `
+export const PI = 3.14;
+export function add(a: number, b: number): number {
+  return a + b;
+}
+export class Calculator {
+  compute() { return 0; }
+}
+import { helper } from './helper';
+`);
+    addFile(repo, "src/helper.ts", `export const helper = 1;\n`);
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    const symbolsPath = join(repo, ".codewiki", "index", "symbols.json");
+    const symbols = JSON.parse(readFileSync(symbolsPath, "utf-8"));
+    expect(Array.isArray(symbols.data)).toBe(true);
+    expect(symbols.data.length).toBeGreaterThanOrEqual(4);
+
+    const names = symbols.data.map((s: { name: string }) => s.name);
+    expect(names).toContain("PI");
+    expect(names).toContain("add");
+    expect(names).toContain("Calculator");
+
+    const importsPath = join(repo, ".codewiki", "index", "imports.json");
+    const imports = JSON.parse(readFileSync(importsPath, "utf-8"));
+    expect(Array.isArray(imports.data)).toBe(true);
+    expect(imports.data.length).toBeGreaterThanOrEqual(1);
+    expect(imports.data.some((i: { source: string }) => i.source === "./helper")).toBe(true);
+
+    const blocksPath = join(repo, ".codewiki", "index", "blocks.json");
+    const blocks = JSON.parse(readFileSync(blocksPath, "utf-8"));
+    expect(Array.isArray(blocks.data)).toBe(true);
+    expect(blocks.data.length).toBeGreaterThanOrEqual(4);
+
+    cleanup(repo);
+  });
+
+  it("indexes Python symbols", async () => {
+    const repo = createTempRepo("indexer-py");
+    addFile(repo, "app.py", `
+def greet(name: str) -> str:
+    return f"Hello {name}"
+
+class Greeter:
+    def __init__(self):
+        pass
+
+from fastapi import FastAPI
+import os
+`);
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    const symbolsPath = join(repo, ".codewiki", "index", "symbols.json");
+    const symbols = JSON.parse(readFileSync(symbolsPath, "utf-8"));
+    expect(Array.isArray(symbols.data)).toBe(true);
+    expect(symbols.data.length).toBeGreaterThanOrEqual(2);
+
+    const names = symbols.data.map((s: { name: string }) => s.name);
+    expect(names).toContain("greet");
+    expect(names).toContain("Greeter");
+
+    const importsPath = join(repo, ".codewiki", "index", "imports.json");
+    const imports = JSON.parse(readFileSync(importsPath, "utf-8"));
+    expect(Array.isArray(imports.data)).toBe(true);
+    expect(imports.data.length).toBeGreaterThanOrEqual(2);
+
+    cleanup(repo);
+  });
+
+  it("produces deterministic IDs", async () => {
+    const repo = createTempRepo("indexer-deterministic");
+    addFile(repo, "lib.js", `export const x = 1;\nexport function foo() {}\n`);
+
+    await scanCommand(repo, { nonInteractive: true });
+    const symbols1 = JSON.parse(readFileSync(join(repo, ".codewiki", "index", "symbols.json"), "utf-8"));
+
+    // Remove .codewiki and rescan
+    rmSync(join(repo, ".codewiki"), { recursive: true, force: true });
+    await scanCommand(repo, { nonInteractive: true });
+    const symbols2 = JSON.parse(readFileSync(join(repo, ".codewiki", "index", "symbols.json"), "utf-8"));
+
+    expect(symbols1.data.length).toBe(symbols2.data.length);
+    for (let i = 0; i < symbols1.data.length; i++) {
+      expect(symbols1.data[i].id).toBe(symbols2.data[i].id);
+    }
+
+    cleanup(repo);
+  });
+
+  it("falls back for unsupported languages", async () => {
+    const repo = createTempRepo("indexer-fallback");
+    addFile(repo, "main.go", `package main\n\nfunc main() {\n    println("hello")\n}\n`);
+    addFile(repo, "app.rs", `fn main() {\n    println!("hello");\n}\n`);
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    const blocksPath = join(repo, ".codewiki", "index", "blocks.json");
+    const blocks = JSON.parse(readFileSync(blocksPath, "utf-8"));
+    expect(Array.isArray(blocks.data)).toBe(true);
+    expect(blocks.data.length).toBeGreaterThanOrEqual(2);
+
+    const goBlock = blocks.data.find((b: { filePath: string }) => b.filePath === "main.go");
+    expect(goBlock).toBeDefined();
+    expect(goBlock.kind).toBe("unknown");
+
+    const symbolsPath = join(repo, ".codewiki", "index", "symbols.json");
+    const symbols = JSON.parse(readFileSync(symbolsPath, "utf-8"));
+    expect(symbols.data.length).toBe(0);
+
+    cleanup(repo);
+  });
+
+  it("groups monorepo packages as modules", async () => {
+    const repo = createTempRepo("indexer-monorepo");
+    addFile(repo, "package.json", JSON.stringify({ name: "root", workspaces: ["packages/*"] }));
+    addFile(repo, "packages/core/package.json", JSON.stringify({ name: "@test/core", main: "index.js" }));
+    addFile(repo, "packages/core/index.js", `export const core = 1;\n`);
+    addFile(repo, "packages/cli/package.json", JSON.stringify({ name: "@test/cli", bin: { test: "./bin.js" } }));
+    addFile(repo, "packages/cli/bin.js", `#!/usr/bin/env node\nconsole.log('hi');\n`);
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    const modulesPath = join(repo, ".codewiki", "artifacts", "modules.json");
+    const modules = JSON.parse(readFileSync(modulesPath, "utf-8"));
+    expect(Array.isArray(modules.data)).toBe(true);
+    expect(modules.data.length).toBeGreaterThanOrEqual(2);
+
+    const names = modules.data.map((m: { name: string }) => m.name);
+    expect(names).toContain("@test/core");
+    expect(names).toContain("@test/cli");
+
+    const coreModule = modules.data.find((m: { name: string }) => m.name === "@test/core");
+    expect(coreModule.files).toContain("packages/core/index.js");
+    expect(coreModule.files).toContain("packages/core/package.json");
+
+    cleanup(repo);
+  });
+
+  it("status reports indexer counts", async () => {
+    const repo = createTempRepo("indexer-status");
+    addFile(repo, "lib.js", `export const x = 1;\nexport function foo() {}\n`);
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    let output = "";
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+
+    await statusCommand(repo, { json: true });
+    console.log = originalLog;
+
+    const status = JSON.parse(output);
+    expect(status).toHaveProperty("symbolCount");
+    expect(status).toHaveProperty("importCount");
+    expect(status).toHaveProperty("blockCount");
+    expect(status).toHaveProperty("moduleCount");
+    expect(typeof status.symbolCount).toBe("number");
+    expect(typeof status.importCount).toBe("number");
+    expect(typeof status.blockCount).toBe("number");
+    expect(typeof status.moduleCount).toBe("number");
+
+    cleanup(repo);
+  });
+});

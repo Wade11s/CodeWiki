@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { createSnapshot, writeSnapshot, loadConfig, writeRepoConfig, extractFeatureCandidates, CodeWikiError } from "@codewiki/core";
+import { createSnapshot, writeSnapshot, loadConfig, writeRepoConfig, extractFeatureCandidates, runIndexer, CodeWikiError } from "@codewiki/core";
 import { generateSite } from "../site-generator.js";
 import { shouldSkipFile, shouldSkipDir, isCodewikiIgnored, addCodewikiToGitignore } from "@codewiki/core";
 import type { SkippedFile, ScanConfig } from "@codewiki/core";
@@ -51,7 +51,14 @@ function scanDir(dir: string, root: string, scanConfig: ScanConfig): ScanResult 
   return { files, skipped };
 }
 
-function writeIndexArtifacts(codewikiDir: string, snapshotId: string, files: string[], skipped: SkippedFile[], repoPath: string): void {
+function writeIndexArtifacts(
+  codewikiDir: string,
+  snapshotId: string,
+  files: string[],
+  skipped: SkippedFile[],
+  repoPath: string,
+  indexerResult: ReturnType<typeof runIndexer>
+): void {
   const indexDir = join(codewikiDir, "index");
   mkdirSync(indexDir, { recursive: true });
 
@@ -69,17 +76,17 @@ function writeIndexArtifacts(codewikiDir: string, snapshotId: string, files: str
 
   writeFileSync(
     join(indexDir, "symbols.json"),
-    JSON.stringify(envelope([]), null, 2)
+    JSON.stringify(envelope(indexerResult.symbols), null, 2)
   );
 
   writeFileSync(
     join(indexDir, "imports.json"),
-    JSON.stringify(envelope([]), null, 2)
+    JSON.stringify(envelope(indexerResult.imports), null, 2)
   );
 
   writeFileSync(
     join(indexDir, "blocks.json"),
-    JSON.stringify(envelope([]), null, 2)
+    JSON.stringify(envelope(indexerResult.blocks), null, 2)
   );
 
   const featureCandidates = extractFeatureCandidates(repoPath, files);
@@ -94,7 +101,11 @@ function writeIndexArtifacts(codewikiDir: string, snapshotId: string, files: str
   );
 }
 
-function writeArtifactFiles(codewikiDir: string, snapshotId: string): void {
+function writeArtifactFiles(
+  codewikiDir: string,
+  snapshotId: string,
+  modules: unknown[]
+): void {
   const artifactsDir = join(codewikiDir, "artifacts");
   mkdirSync(artifactsDir, { recursive: true });
 
@@ -112,7 +123,7 @@ function writeArtifactFiles(codewikiDir: string, snapshotId: string): void {
 
   writeFileSync(
     join(artifactsDir, "modules.json"),
-    JSON.stringify(envelope([]), null, 2)
+    JSON.stringify(envelope(modules), null, 2)
   );
 
   writeFileSync(
@@ -189,8 +200,9 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
   writeSnapshot(repoPath, snapshot);
 
   const { files, skipped } = scanDir(repoPath, repoPath, config.scan);
-  writeIndexArtifacts(codewikiDir, snapshot.id, files, skipped, repoPath);
-  writeArtifactFiles(codewikiDir, snapshot.id);
+  const indexerResult = runIndexer(repoPath, files);
+  writeIndexArtifacts(codewikiDir, snapshot.id, files, skipped, repoPath, indexerResult);
+  writeArtifactFiles(codewikiDir, snapshot.id, indexerResult.modules);
 
   if (options.writeConfig) {
     writeRepoConfig(repoPath, {

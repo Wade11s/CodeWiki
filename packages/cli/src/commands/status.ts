@@ -58,6 +58,30 @@ function getFailedTasks(repoPath: string): Array<{ taskId: string; state: string
     }));
 }
 
+function readIndexArtifactCount(repoPath: string, artifactName: string): number {
+  const path = join(repoPath, ".codewiki", "index", `${artifactName}.json`);
+  if (!existsSync(path)) return 0;
+  try {
+    const raw = readFileSync(path, "utf-8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed.data) ? parsed.data.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
+function readArtifactCount(repoPath: string, artifactName: string): number {
+  const path = join(repoPath, ".codewiki", "artifacts", `${artifactName}.json`);
+  if (!existsSync(path)) return 0;
+  try {
+    const raw = readFileSync(path, "utf-8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed.data) ? parsed.data.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 export async function statusCommand(repoPath: string, options: { json?: boolean }): Promise<void> {
   const snapshot = readSnapshot(repoPath);
   const { agent, scan } = loadConfigWithSources(repoPath);
@@ -72,6 +96,11 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
   const candidateGroups = readFeatureCandidates(repoPath);
   const candidateCount = countCandidates(candidateGroups);
   const failedTasks = getFailedTasks(repoPath);
+
+  const symbolCount = readIndexArtifactCount(repoPath, "symbols");
+  const importCount = readIndexArtifactCount(repoPath, "imports");
+  const blockCount = readIndexArtifactCount(repoPath, "blocks");
+  const moduleCount = readArtifactCount(repoPath, "modules");
 
   const status = {
     codewikiExists: exists,
@@ -97,6 +126,10 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
     failedTaskSummaries: failedTasks,
     candidateCount,
     candidateGroups: candidateGroups.length,
+    symbolCount,
+    importCount,
+    blockCount,
+    moduleCount,
   };
 
   if (options.json) {
@@ -112,6 +145,10 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
       console.log(`Dirty: ${snapshot.gitDirty}`);
       console.log(`Files: ${snapshot.fileCount}`);
       console.log(`Stale: ${stale}`);
+      console.log(`Symbols: ${symbolCount}`);
+      console.log(`Imports: ${importCount}`);
+      console.log(`Blocks: ${blockCount}`);
+      console.log(`Modules: ${moduleCount}`);
       console.log(`Feature candidates: ${candidateCount} (${candidateGroups.length} groups)`);
     } else {
       console.log("No snapshot found. Run 'codewiki scan' first.");

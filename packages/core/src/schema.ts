@@ -158,3 +158,90 @@ export const RunRecordSchema = z.object({
     timedOut: z.number().int().min(0),
   }),
 });
+
+export const SymbolKindSchema = z.enum([
+  "function",
+  "class",
+  "interface",
+  "type",
+  "enum",
+  "variable",
+  "const",
+  "let",
+  "method",
+  "property",
+  "module",
+  "arrow_function",
+  "export",
+  "unknown",
+]);
+
+export const CodeSymbolSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  kind: SymbolKindSchema,
+  filePath: z.string(),
+  lineStart: z.number().int().min(1),
+  lineEnd: z.number().int().min(1),
+  snippet: z.string(),
+  exported: z.boolean(),
+  language: z.string(),
+  parentSymbol: z.string().optional(),
+});
+
+export const ImportSchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  names: z.array(z.string()),
+  filePath: z.string(),
+  lineStart: z.number().int().min(1),
+  lineEnd: z.number().int().min(1),
+  snippet: z.string(),
+  isDefault: z.boolean(),
+  isNamespace: z.boolean(),
+  language: z.string(),
+});
+
+export const BlockKindSchema = z.enum([
+  "function",
+  "class",
+  "interface",
+  "type",
+  "enum",
+  "export",
+  "import",
+  "comment",
+  "unknown",
+]);
+
+export const BlockSchema = z.object({
+  id: z.string(),
+  kind: BlockKindSchema,
+  name: z.string(),
+  filePath: z.string(),
+  lineStart: z.number().int().min(1),
+  lineEnd: z.number().int().min(1),
+  snippet: z.string(),
+  language: z.string(),
+  symbolIds: z.array(z.string()),
+});
+
+export const ModuleTypeSchema = z.enum(["package", "workspace", "directory"]);
+
+export const ModuleSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  path: z.string(),
+  type: ModuleTypeSchema,
+  language: z.string().optional(),
+  files: z.array(z.string()),
+  entryPoints: z.array(z.string()).optional(),
+  dependencies: z.array(z.string()).optional(),
+});
+
+export const IndexerResultSchema = z.object({
+  symbols: z.array(CodeSymbolSchema),
+  imports: z.array(ImportSchema),
+  blocks: z.array(BlockSchema),
+  modules: z.array(ModuleSchema),
+});
