@@ -238,7 +238,83 @@ export interface RunTaskOptions {
   inputArtifacts: string[];
   outputSchema: string;
   timeoutSeconds: number;
-  retries: number;
+  retries?: number;
+}
+
+async function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+export async function runTaskWithRetry(
+  provider: AgentProvider,
+  options: RunTaskOptions
+): Promise<TaskResult> {
+  const maxRetries = options.retries ?? 1;
+  const timeoutMs = options.timeoutSeconds * 1000;
+  let lastResult: TaskResult | null = null;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const startTime = Date.now();
+
+    const taskPromise = provider.runTask({
+      prompt: options.prompt,
+      repoIndexPath: options.repoIndexPath,
+      inputArtifacts: options.inputArtifacts,
+      outputSchema: options.outputSchema,
+      timeoutSeconds: options.timeoutSeconds,
+      retries: options.retries ?? 0,
+    }).catch((err: unknown) => ({
+      taskId: `error-${Date.now()}`,
+      exitCode: 1,
+      durationMs: 0,
+      stdout: "",
+      stderr: err instanceof Error ? err.message : String(err),
+      retries: 0,
+      validationErrors: [],
+      state: "failed" as TaskState,
+    }));
+
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error(`Task timed out after ${options.timeoutSeconds}s`)), timeoutMs);
+    });
+
+    try {
+      const result = await Promise.race([taskPromise, timeoutPromise]);
+      const durationMs = Date.now() - startTime;
+
+      lastResult = {
+        ...result,
+        durationMs,
+        retries: attempt,
+      };
+
+      if (result.exitCode === 0) {
+        return lastResult;
+      }
+
+      // Exit code non-zero, will retry if attempts remain
+    } catch (err) {
+      const durationMs = Date.now() - startTime;
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      lastResult = {
+        taskId: `timeout-${Date.now()}`,
+        exitCode: 1,
+        durationMs,
+        stdout: "",
+        stderr: errorMsg,
+        retries: attempt,
+        validationErrors: [],
+        state: "timeout" as TaskState,
+      };
+    }
+
+    if (attempt < maxRetries) {
+      // Exponential backoff: 500ms, 1000ms, 2000ms, ...
+      await sleep(500 * Math.pow(2, attempt));
+    }
+  }
+
+  return lastResult!;
 }
 
 export class AgentRunner {
@@ -281,7 +357,7 @@ export class AgentRunner {
 
     let lastResult: TaskResult | null = null;
     let attempt = 0;
-    const maxAttempts = options.retries + 1;
+    const maxAttempts = (options.retries ?? 0) + 1;
 
     while (attempt < maxAttempts) {
       attempt++;
@@ -309,7 +385,7 @@ export class AgentRunner {
           stderr: error instanceof Error ? error.message : String(error),
           retries: attempt - 1,
           validationErrors: [],
-          state: "failed",
+          state: "failed" as TaskState,
         };
       }
     }
@@ -322,7 +398,7 @@ export class AgentRunner {
       stderr: "No result produced",
       retries: attempt - 1,
       validationErrors: ["No result produced after all attempts"],
-      state: "failed",
+      state: "failed" as TaskState,
     };
 
     // Override retries in final result to reflect total attempts
@@ -375,6 +451,45 @@ export class AgentRunner {
     return resultWithRetries;
   }
 
+  async runTasksInParallel(
+    providerName: string,
+    tasks: Array<{ taskId: string; prompt: string; inputArtifacts: string[]; outputSchema: string }>,
+    options: { timeoutSeconds: number; retries: number; concurrency: number }
+  ): Promise<TaskResult[]> {
+    const provider = this.providers.find((p) => p.name === providerName);
+    if (!provider) {
+      throw new Error(`Provider not found: ${providerName}`);
+    }
+    const resolvedProvider = provider;
+
+    const results: TaskResult[] = new Array(tasks.length);
+    const queue = tasks.map((task, index) => ({ ...task, index }));
+    let nextIndex = 0;
+
+    async function worker(): Promise<void> {
+      while (nextIndex < queue.length) {
+        const item = queue[nextIndex++];
+        const result = await runTaskWithRetry(resolvedProvider, {
+          prompt: item.prompt,
+          repoIndexPath: "", // set by caller if needed
+          inputArtifacts: item.inputArtifacts,
+          outputSchema: item.outputSchema,
+          timeoutSeconds: options.timeoutSeconds,
+          retries: options.retries,
+        });
+        results[item.index] = result;
+      }
+    }
+
+    const workers: Promise<void>[] = [];
+    for (let i = 0; i < Math.min(options.concurrency, tasks.length); i++) {
+      workers.push(worker());
+    }
+
+    await Promise.all(workers);
+    return results;
+  }
+
   private async runWithTimeout(
     provider: AgentProvider,
     options: RunTaskOptions
@@ -393,12 +508,12 @@ export class AgentRunner {
           stderr: `Task timed out after ${options.timeoutSeconds}s`,
           retries: 0,
           validationErrors: [],
-          state: "timeout",
+          state: "timeout" as TaskState,
         });
       }, timeoutMs);
 
       provider
-        .runTask(options)
+        .runTask({ ...options, retries: options.retries ?? 0 })
         .then((result) => {
           clearTimeout(timer);
           resolve(result);

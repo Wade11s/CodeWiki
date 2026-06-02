@@ -81,7 +81,7 @@ describe("status with failed tasks", () => {
     const { output } = await captureOutput(() => statusCommand(repo, { json: true }));
     const parsed = JSON.parse(output);
 
-    expect(parsed.failedTasks).toBe(1);
+    expect(parsed.agentFailedTasks).toBe(1);
     expect(parsed.failedTaskSummaries).toBeArray();
     expect(parsed.failedTaskSummaries.length).toBe(1);
     expect(parsed.failedTaskSummaries[0].state).toBe("failed");
@@ -99,7 +99,7 @@ describe("status with failed tasks", () => {
     const { output } = await captureOutput(() => statusCommand(repo, { json: true }));
     const parsed = JSON.parse(output);
 
-    expect(parsed.failedTasks).toBe(0);
+    expect(parsed.agentFailedTasks).toBe(0);
     expect(parsed.failedTaskSummaries).toBeArray();
     expect(parsed.failedTaskSummaries.length).toBe(0);
 
@@ -126,7 +126,7 @@ describe("status with failed tasks", () => {
     });
 
     const { output } = await captureOutput(() => statusCommand(repo, {}));
-    expect(output).toContain("Failed tasks: 1");
+    expect(output).toContain("Agent failed tasks: 1");
     expect(output).toContain("failed");
 
     cleanup(repo);
