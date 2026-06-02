@@ -25,6 +25,22 @@ export interface Evidence {
   relatedSymbols?: string[];
 }
 
+export interface FeatureCandidate {
+  id: string;
+  category: "script" | "cli" | "route" | "api" | "ui-page" | "test" | "export" | "readme-usage";
+  name: string;
+  description?: string;
+  evidence: Evidence[];
+}
+
+export interface FeatureCandidateGroup {
+  id: string;
+  category: FeatureCandidate["category"];
+  name: string;
+  description?: string;
+  candidates: FeatureCandidate[];
+}
+
 export interface Artifact {
   schemaVersion: string;
   snapshotId: string;
@@ -95,22 +111,6 @@ export interface EffectiveAgentConfig {
 export interface EffectiveScanConfig {
   interactiveConfig: boolean;
   source: ConfigSource;
-}
-
-export interface FeatureCandidate {
-  id: string;
-  category: "script" | "cli" | "route" | "api" | "ui-page" | "test" | "export" | "readme-usage";
-  name: string;
-  description?: string;
-  evidence: Evidence[];
-}
-
-export interface FeatureCandidateGroup {
-  id: string;
-  category: FeatureCandidate["category"];
-  name: string;
-  description?: string;
-  candidates: FeatureCandidate[];
 }
 
 export type TaskState = "pending" | "running" | "success" | "failed" | "timeout";
@@ -255,4 +255,76 @@ export interface RunRecord {
     failed: number;
     timedOut: number;
   };
+}
+
+// ── Pipeline types ──
+
+export type ScanPhase =
+  | "idle"
+  | "indexing"
+  | "feature_extraction"
+  | "agent_tasks"
+  | "validation"
+  | "site_generation"
+  | "complete"
+  | "failed";
+
+export interface ModulePartition {
+  name: string;
+  files: string[];
+  type: "package" | "directory" | "orphan";
+}
+
+export interface PipelineTaskRecord {
+  taskId: string;
+  moduleName: string;
+  phase: ScanPhase;
+  status: "pending" | "running" | "success" | "failed" | "skipped";
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMs: number;
+  retriesUsed: number;
+  error: string | null;
+  stdout: string;
+  stderr: string;
+  validationErrors: string[];
+}
+
+export interface ModuleResult {
+  moduleName: string;
+  status: "complete" | "incomplete" | "failed";
+  files: string[];
+  artifacts: Artifact[];
+  diagnostics: string[];
+}
+
+export interface PipelineRunRecord {
+  runId: string;
+  snapshotId: string;
+  startedAt: string;
+  completedAt: string | null;
+  phase: ScanPhase;
+  status: "running" | "success" | "partial" | "failed";
+  modules: ModuleResult[];
+  tasks: PipelineTaskRecord[];
+  skippedFiles: string[];
+  failedTaskCount: number;
+  incompleteModuleCount: number;
+  config: AgentConfig;
+}
+
+export interface ArtifactValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface ScanDiagnostics {
+  runId: string;
+  phase: ScanPhase;
+  timestamp: string;
+  message: string;
+  level: "info" | "warn" | "error";
+  taskId?: string;
+  moduleName?: string;
 }

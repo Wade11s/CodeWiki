@@ -364,7 +364,7 @@ describe("scan one-off overrides", () => {
 
     let err: unknown;
     try {
-      await scanCommand(repo, { concurrency: "abc" });
+      await scanCommand(repo, { concurrency: "abc", nonInteractive: true });
     } catch (e) {
       err = e;
     }
@@ -382,7 +382,7 @@ describe("scan one-off overrides", () => {
 
     let err: unknown;
     try {
-      await scanCommand(repo, { timeout: "-5" });
+      await scanCommand(repo, { timeout: "-5", nonInteractive: true });
     } catch (e) {
       err = e;
     }
@@ -412,7 +412,7 @@ describe("scan one-off overrides", () => {
 
     let err: unknown;
     try {
-      await scanCommand(repo, { retries: "-1" });
+      await scanCommand(repo, { retries: "-1", nonInteractive: true });
     } catch (e) {
       err = e;
     }

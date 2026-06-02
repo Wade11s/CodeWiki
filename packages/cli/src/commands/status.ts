@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readSnapshot, loadConfigWithSources, isSnapshotStale, countCandidates, RunStore, SkippedFilesArtifactSchema, SkipReasonSchema } from "@codewiki/core";
+import { readSnapshot, loadConfigWithSources, isSnapshotStale, countCandidates, readLatestRun, RunStore, SkippedFilesArtifactSchema, SkipReasonSchema } from "@codewiki/core";
 import type { SkippedFilesArtifact, SkipReason, FeatureCandidateGroup } from "@codewiki/core";
 
 function readSkippedFiles(repoPath: string): SkippedFilesArtifact | null {
@@ -91,10 +91,12 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
 
   const codewikiDir = join(repoPath, ".codewiki");
   const exists = existsSync(codewikiDir);
+  const latestRun = exists ? readLatestRun(codewikiDir) : null;
 
-  const stale = snapshot ? isSnapshotStale(repoPath, snapshot) : false;
   const candidateGroups = readFeatureCandidates(repoPath);
   const candidateCount = countCandidates(candidateGroups);
+
+  const stale = snapshot ? isSnapshotStale(repoPath, snapshot) : false;
   const failedTasks = getFailedTasks(repoPath);
 
   const symbolCount = readIndexArtifactCount(repoPath, "symbols");
@@ -120,10 +122,17 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
     },
     stale,
     schemaVersion: snapshot ? snapshot.schemaVersion : null,
+    latestRunId: latestRun?.runId || null,
+    scanPhase: latestRun?.phase || "idle",
+    failedTasks: latestRun?.failedTaskCount || 0,
+    incompleteModules: latestRun?.incompleteModuleCount || 0,
     skippedFiles: totalSkipped,
     skippedByReason: skippedCounts,
-    failedTasks: failedTasks.length,
+    agentFailedTasks: failedTasks.length,
     failedTaskSummaries: failedTasks,
+    runStatus: latestRun?.status || null,
+    modulesAnalyzed: latestRun?.modules?.length || 0,
+    modulesComplete: latestRun ? latestRun.modules.filter((m) => m.status === "complete").length : 0,
     candidateCount,
     candidateGroups: candidateGroups.length,
     symbolCount,
@@ -171,10 +180,20 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
     }
     if (failedTasks.length > 0) {
       console.log("");
-      console.log(`Failed tasks: ${failedTasks.length}`);
+      console.log(`Agent failed tasks: ${failedTasks.length}`);
       for (const task of failedTasks) {
         console.log(`  ${task.taskId} (${task.state}): ${task.summary}`);
       }
+    }
+
+    if (latestRun) {
+      console.log("");
+      console.log(`Latest run: ${latestRun.runId}`);
+      console.log(`Scan phase: ${latestRun.phase}`);
+      console.log(`Run status: ${latestRun.status}`);
+      console.log(`Modules: ${latestRun.modules.length} (${latestRun.modules.filter((m) => m.status === "complete").length} complete)`);
+      console.log(`Incomplete modules: ${latestRun.incompleteModuleCount}`);
+      console.log(`Failed tasks: ${latestRun.failedTaskCount}`);
     }
   }
 }

@@ -12,8 +12,17 @@ import type { AgentProvider, TaskResult, DetectedAgent } from "./types.js";
  *   anything else    -> defaults to success
  */
 export class FakeProvider implements AgentProvider {
-  name = "fake";
+  name: string;
   private retryCounters = new Map<string, number>();
+  private behavior: "default" | "validate" = "default";
+
+  constructor(name = "fake") {
+    this.name = name;
+  }
+
+  setBehavior(behavior: "default" | "validate"): void {
+    this.behavior = behavior;
+  }
 
   async detect(): Promise<DetectedAgent | null> {
     return {
@@ -117,11 +126,20 @@ export class FakeProvider implements AgentProvider {
     }
 
     // Default: success
+    const stdout = this.behavior === "validate"
+      ? JSON.stringify({
+          summary: `Analysis for ${options.prompt.slice(0, 50)}`,
+          keyFeatures: ["feature-a"],
+          complexity: "low",
+          evidence: [{ filePath: "src/example.ts", lineStart: 1, lineEnd: 5, snippet: "export const x = 1;" }],
+        })
+      : `Fake response for: ${options.prompt.slice(0, 100)}`;
+
     return {
       taskId,
       exitCode: 0,
       durationMs: 10,
-      stdout: `Fake response for: ${options.prompt.slice(0, 100)}`,
+      stdout,
       stderr: "",
       retries: 0,
       validationErrors: [],

@@ -1,9 +1,20 @@
 import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { createSnapshot, writeSnapshot, loadConfig, writeRepoConfig, extractFeatureCandidates, runIndexer, CodeWikiError } from "@codewiki/core";
+import {
+  createSnapshot,
+  writeSnapshot,
+  loadConfig,
+  writeRepoConfig,
+  runIndexer,
+  CodeWikiError,
+  AgentRunner,
+  FakeProvider,
+  runPipeline,
+} from "@codewiki/core";
+import type { AgentRunner as AgentRunnerType } from "@codewiki/core";
 import { generateSite } from "../site-generator.js";
-import { shouldSkipFile, shouldSkipDir, isCodewikiIgnored, addCodewikiToGitignore } from "@codewiki/core";
-import type { SkippedFile, ScanConfig } from "@codewiki/core";
+import { shouldSkipFile, shouldSkipDir, isCodewikiIgnored, addCodewikiToGitignore, extractFeatureCandidates } from "@codewiki/core";
+import type { SkippedFile, ScanConfig, FeatureCandidateGroup } from "@codewiki/core";
 
 interface ScanOptions {
   concurrency?: string;
@@ -13,6 +24,7 @@ interface ScanOptions {
   writeConfig?: boolean;
   nonInteractive?: boolean;
   _testConfirmFn?: () => Promise<boolean>;
+  runner?: AgentRunnerType;
 }
 
 interface ScanResult {
@@ -57,7 +69,8 @@ function writeIndexArtifacts(
   files: string[],
   skipped: SkippedFile[],
   repoPath: string,
-  indexerResult: ReturnType<typeof runIndexer>
+  indexerResult: ReturnType<typeof runIndexer>,
+  featureCandidates: FeatureCandidateGroup[]
 ): void {
   const indexDir = join(codewikiDir, "index");
   mkdirSync(indexDir, { recursive: true });
@@ -89,7 +102,6 @@ function writeIndexArtifacts(
     JSON.stringify(envelope(indexerResult.blocks), null, 2)
   );
 
-  const featureCandidates = extractFeatureCandidates(repoPath, files);
   writeFileSync(
     join(indexDir, "feature-candidates.json"),
     JSON.stringify(envelope(featureCandidates), null, 2)
@@ -188,7 +200,7 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
   const retries = options.retries
     ? parseValidatedInt(options.retries, 0, "retries")
     : config.agent.retries;
-  const agent = options.agent || config.agent.default;
+  const providerName = options.agent || config.agent.default;
 
   const codewikiDir = join(repoPath, ".codewiki");
   mkdirSync(codewikiDir, { recursive: true });
@@ -201,18 +213,42 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
 
   const { files, skipped } = scanDir(repoPath, repoPath, config.scan);
   const indexerResult = runIndexer(repoPath, files);
-  writeIndexArtifacts(codewikiDir, snapshot.id, files, skipped, repoPath, indexerResult);
+  const featureCandidates = extractFeatureCandidates(repoPath, files);
+  writeIndexArtifacts(codewikiDir, snapshot.id, files, skipped, repoPath, indexerResult, featureCandidates);
   writeArtifactFiles(codewikiDir, snapshot.id, indexerResult.modules);
+
+  // Set up runner
+  const runner = options.runner || new AgentRunner();
+  if (!options.runner) {
+    const fakeProvider = new FakeProvider(providerName);
+    runner.register(fakeProvider);
+  }
+
+  const scanConfig = {
+    ...config.agent,
+    default: providerName,
+    concurrency,
+    timeoutSeconds,
+    retries,
+  };
+
+  console.log(`Indexing ${files.length} files (${skipped.length} skipped)`);
+  console.log(`Running pipeline with concurrency=${concurrency}, timeout=${timeoutSeconds}s, retries=${retries}`);
+
+  const { runRecord } = await runPipeline({
+    repoPath,
+    snapshot,
+    files,
+    skippedFiles: skipped.map((s) => s.path),
+    config: scanConfig,
+    providerName,
+    runner,
+    codewikiDir,
+  });
 
   if (options.writeConfig) {
     writeRepoConfig(repoPath, {
-      agent: {
-        ...config.agent,
-        concurrency,
-        timeoutSeconds,
-        retries,
-        default: agent,
-      },
+      agent: scanConfig,
     });
   }
 
@@ -235,7 +271,13 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
 
   console.log(`Scanned ${files.length} files`);
   console.log(`Snapshot: ${snapshot.id}`);
+  console.log(`Run: ${runRecord.runId}`);
   console.log(`Git head: ${snapshot.gitHead || "(not a git repo)"}`);
   console.log(`Dirty: ${snapshot.gitDirty}`);
   console.log(`Schema version: ${snapshot.schemaVersion}`);
+  console.log(`Modules: ${runRecord.modules.length}`);
+  console.log(`Complete: ${runRecord.modules.filter((m) => m.status === "complete").length}`);
+  console.log(`Incomplete: ${runRecord.incompleteModuleCount}`);
+  console.log(`Failed tasks: ${runRecord.failedTaskCount}`);
+  console.log(`Status: ${runRecord.status}`);
 }

@@ -7,3 +7,6 @@ export * from "./agent-runner.js";
 export * from "./feature-candidates.js";
 export * from "./error.js";
 export * from "./indexer.js";
+export * from "./validation.js";
+export * from "./pipeline.js";
+export { FakeProvider } from "./testing.js";
