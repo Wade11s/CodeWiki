@@ -1,6 +1,6 @@
 import { createServer } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
-import { join, extname } from "node:path";
+import { join, extname, resolve } from "node:path";
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html",
@@ -27,7 +27,13 @@ export async function serveCommand(repoPath: string, options: { port?: string })
   const port = parseInt(options.port || "3000", 10);
 
   const server = createServer((req, res) => {
-    let filePath = join(siteDir, req.url === "/" ? "index.html" : req.url || "index.html");
+    const resolvedSiteDir = resolve(siteDir);
+    let filePath = resolve(join(siteDir, req.url === "/" ? "index.html" : req.url || "index.html"));
+
+    if (!filePath.startsWith(resolvedSiteDir)) {
+      // Path traversal attempt — fall back to SPA
+      filePath = join(siteDir, "index.html");
+    }
 
     if (!existsSync(filePath) || statSync(filePath).isDirectory()) {
       // SPA fallback
