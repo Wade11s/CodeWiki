@@ -4,7 +4,7 @@ import { readSnapshot, loadConfigWithSources } from "@codewiki/core";
 
 export async function statusCommand(repoPath: string, options: { json?: boolean }): Promise<void> {
   const snapshot = readSnapshot(repoPath);
-  const { config, agent, scan } = loadConfigWithSources(repoPath);
+  const { agent, scan } = loadConfigWithSources(repoPath);
 
   const codewikiDir = join(repoPath, ".codewiki");
   const exists = existsSync(codewikiDir);

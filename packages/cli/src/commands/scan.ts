@@ -117,6 +117,15 @@ interface ScanOptions {
   writeConfig?: boolean;
 }
 
+function parseValidatedInt(value: string, min: number, name: string): number {
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < min) {
+    console.error(`Error: Invalid ${name} "${value}". Expected an integer >= ${min}.`);
+    process.exit(1);
+  }
+  return parsed;
+}
+
 export async function scanCommand(repoPath: string, options: ScanOptions): Promise<void> {
   if (!existsSync(repoPath)) {
     console.error(`Error: Repository path does not exist: ${repoPath}`);
@@ -125,9 +134,15 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
 
   const config = loadConfig(repoPath);
 
-  const concurrency = options.concurrency ? parseInt(options.concurrency, 10) : config.agent.concurrency;
-  const timeoutSeconds = options.timeout ? parseInt(options.timeout, 10) : config.agent.timeoutSeconds;
-  const retries = options.retries ? parseInt(options.retries, 10) : config.agent.retries;
+  const concurrency = options.concurrency
+    ? parseValidatedInt(options.concurrency, 1, "concurrency")
+    : config.agent.concurrency;
+  const timeoutSeconds = options.timeout
+    ? parseValidatedInt(options.timeout, 1, "timeout")
+    : config.agent.timeoutSeconds;
+  const retries = options.retries
+    ? parseValidatedInt(options.retries, 0, "retries")
+    : config.agent.retries;
   const agent = options.agent || config.agent.default;
 
   const codewikiDir = join(repoPath, ".codewiki");

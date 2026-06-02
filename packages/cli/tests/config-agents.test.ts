@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { loadConfig, loadConfigWithSources, writeRepoConfig, writeUserConfig } from "@codewiki/core";
 import { scanCommand } from "../src/commands/scan.js";
 import { statusCommand } from "../src/commands/status.js";
-import { agentsCommand } from "../src/commands/agents.js";
+import { agentsCommand, detectAgent } from "../src/commands/agents.js";
+import { askCommand } from "../src/commands/ask.js";
 
 function createTempRepo(name: string): string {
   const dir = mkdtempSync(join(tmpdir(), `codewiki-config-${name}-`));
@@ -41,12 +42,12 @@ describe("Config precedence", () => {
 
   beforeEach(() => {
     userConfigDir = mkdtempSync(join(tmpdir(), "codewiki-user-"));
-    originalHome = process.env.CODEWIKI_TEST_HOME;
-    process.env.CODEWIKI_TEST_HOME = userConfigDir;
+    originalHome = process.env.HOME;
+    process.env.HOME = userConfigDir;
   });
 
   afterEach(() => {
-    process.env.CODEWIKI_TEST_HOME = originalHome;
+    process.env.HOME = originalHome;
     cleanup(userConfigDir);
   });
 
@@ -144,6 +145,22 @@ describe("Config precedence", () => {
 
     cleanup(repo);
   });
+
+  it("loadConfigWithSources treats explicit null as default source", () => {
+    const codewikiDir = join(userConfigDir, ".codewiki");
+    mkdirSync(codewikiDir, { recursive: true });
+    writeFileSync(
+      join(codewikiDir, "config.json"),
+      JSON.stringify({ agent: { concurrency: null, retries: undefined } })
+    );
+
+    const { agent } = loadConfigWithSources();
+    // null should be treated as "not set", so source should be "default"
+    expect(agent.concurrency).toBe(2); // falls back to default
+    expect(agent.sources.concurrency).toBe("default");
+    expect(agent.retries).toBe(1);
+    expect(agent.sources.retries).toBe("default");
+  });
 });
 
 describe("writeRepoConfig", () => {
@@ -152,12 +169,12 @@ describe("writeRepoConfig", () => {
 
   beforeEach(() => {
     userConfigDir = mkdtempSync(join(tmpdir(), "codewiki-user-"));
-    originalHome = process.env.CODEWIKI_TEST_HOME;
-    process.env.CODEWIKI_TEST_HOME = userConfigDir;
+    originalHome = process.env.HOME;
+    process.env.HOME = userConfigDir;
   });
 
   afterEach(() => {
-    process.env.CODEWIKI_TEST_HOME = originalHome;
+    process.env.HOME = originalHome;
     cleanup(userConfigDir);
   });
 
@@ -203,12 +220,12 @@ describe("writeUserConfig", () => {
 
   beforeEach(() => {
     userConfigDir = mkdtempSync(join(tmpdir(), "codewiki-user-"));
-    originalHome = process.env.CODEWIKI_TEST_HOME;
-    process.env.CODEWIKI_TEST_HOME = userConfigDir;
+    originalHome = process.env.HOME;
+    process.env.HOME = userConfigDir;
   });
 
   afterEach(() => {
-    process.env.CODEWIKI_TEST_HOME = originalHome;
+    process.env.HOME = originalHome;
     cleanup(userConfigDir);
   });
 
@@ -266,18 +283,37 @@ describe("agents --json", () => {
   });
 });
 
+describe("agents text output", () => {
+  it("shows detected agents with health markers", async () => {
+    const { output } = await captureOutput(() => agentsCommand({ json: false }));
+
+    expect(output).toContain("Detected agents:");
+    // At least one agent should be listed
+    expect(output).toMatch(/codex|claude|aider|pi/);
+  });
+});
+
+describe("detectAgent", () => {
+  it("returns unavailable for non-existent command", () => {
+    const agent = detectAgent("nonexistent", "this-command-definitely-does-not-exist-xyz", ["--version"]);
+    expect(agent.available).toBe(false);
+    expect(agent.health).toBe("unavailable");
+    expect(agent.version).toBeNull();
+  });
+});
+
 describe("scan one-off overrides", () => {
   let userConfigDir: string;
   let originalHome: string | undefined;
 
   beforeEach(() => {
     userConfigDir = mkdtempSync(join(tmpdir(), "codewiki-user-"));
-    originalHome = process.env.CODEWIKI_TEST_HOME;
-    process.env.CODEWIKI_TEST_HOME = userConfigDir;
+    originalHome = process.env.HOME;
+    process.env.HOME = userConfigDir;
   });
 
   afterEach(() => {
-    process.env.CODEWIKI_TEST_HOME = originalHome;
+    process.env.HOME = originalHome;
     cleanup(userConfigDir);
   });
 
@@ -321,6 +357,139 @@ describe("scan one-off overrides", () => {
 
     cleanup(repo);
   });
+
+  it("rejects invalid --concurrency with error", async () => {
+    const repo = createTempRepo("scan-invalid-concurrency");
+    addFile(repo, "z.js", "const z = 3;\n");
+
+    let exitCode: number | undefined;
+    const originalExit = process.exit;
+    process.exit = ((code?: number) => { exitCode = code; throw new Error(`exit ${code}`); }) as typeof process.exit;
+    const originalError = console.error;
+    let stderr = "";
+    console.error = (...args: unknown[]) => { stderr += args.join(" ") + "\n"; };
+
+    try {
+      await scanCommand(repo, { concurrency: "abc" });
+    } catch {
+      // expected
+    }
+
+    process.exit = originalExit;
+    console.error = originalError;
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Invalid concurrency");
+
+    cleanup(repo);
+  });
+
+  it("rejects negative --timeout with error", async () => {
+    const repo = createTempRepo("scan-negative-timeout");
+    addFile(repo, "w.js", "const w = 4;\n");
+
+    let exitCode: number | undefined;
+    const originalExit = process.exit;
+    process.exit = ((code?: number) => { exitCode = code; throw new Error(`exit ${code}`); }) as typeof process.exit;
+    const originalError = console.error;
+    let stderr = "";
+    console.error = (...args: unknown[]) => { stderr += args.join(" ") + "\n"; };
+
+    try {
+      await scanCommand(repo, { timeout: "-5" });
+    } catch {
+      // expected
+    }
+
+    process.exit = originalExit;
+    console.error = originalError;
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Invalid timeout");
+
+    cleanup(repo);
+  });
+
+  it("allows zero --retries as valid value", async () => {
+    const repo = createTempRepo("scan-zero-retries");
+    addFile(repo, "v.js", "const v = 5;\n");
+
+    await scanCommand(repo, { retries: "0" });
+
+    // Should succeed - no config written by default
+    expect(existsSync(join(repo, ".codewiki", "config.json"))).toBe(false);
+
+    cleanup(repo);
+  });
+
+  it("rejects negative --retries with error", async () => {
+    const repo = createTempRepo("scan-negative-retries");
+    addFile(repo, "u.js", "const u = 6;\n");
+
+    let exitCode: number | undefined;
+    const originalExit = process.exit;
+    process.exit = ((code?: number) => { exitCode = code; throw new Error(`exit ${code}`); }) as typeof process.exit;
+    const originalError = console.error;
+    let stderr = "";
+    console.error = (...args: unknown[]) => { stderr += args.join(" ") + "\n"; };
+
+    try {
+      await scanCommand(repo, { retries: "-1" });
+    } catch {
+      // expected
+    }
+
+    process.exit = originalExit;
+    console.error = originalError;
+
+    expect(exitCode).toBe(1);
+    expect(stderr).toContain("Invalid retries");
+
+    cleanup(repo);
+  });
+});
+
+describe("ask --agent override", () => {
+  let userConfigDir: string;
+  let originalHome: string | undefined;
+
+  beforeEach(() => {
+    userConfigDir = mkdtempSync(join(tmpdir(), "codewiki-user-"));
+    originalHome = process.env.HOME;
+    process.env.HOME = userConfigDir;
+  });
+
+  afterEach(() => {
+    process.env.HOME = originalHome;
+    cleanup(userConfigDir);
+  });
+
+  it("ask uses --agent override in JSON output", async () => {
+    const repo = createTempRepo("ask-agent");
+    addFile(repo, "a.js", "const a = 1;\n");
+
+    // Need a snapshot first
+    await scanCommand(repo, {});
+
+    const { output } = await captureOutput(() => askCommand(repo, "What is this?", { json: true, agent: "aider" }));
+    const parsed = JSON.parse(output);
+    expect(parsed.agent).toBe("aider");
+
+    cleanup(repo);
+  });
+
+  it("ask falls back to config default when no --agent", async () => {
+    const repo = createTempRepo("ask-default");
+    addFile(repo, "b.js", "const b = 2;\n");
+
+    await scanCommand(repo, {});
+
+    const { output } = await captureOutput(() => askCommand(repo, "What is this?", { json: true }));
+    const parsed = JSON.parse(output);
+    expect(parsed.agent).toBe("codex"); // default
+
+    cleanup(repo);
+  });
 });
 
 describe("status reports effective config and sources", () => {
@@ -329,12 +498,12 @@ describe("status reports effective config and sources", () => {
 
   beforeEach(() => {
     userConfigDir = mkdtempSync(join(tmpdir(), "codewiki-user-"));
-    originalHome = process.env.CODEWIKI_TEST_HOME;
-    process.env.CODEWIKI_TEST_HOME = userConfigDir;
+    originalHome = process.env.HOME;
+    process.env.HOME = userConfigDir;
   });
 
   afterEach(() => {
-    process.env.CODEWIKI_TEST_HOME = originalHome;
+    process.env.HOME = originalHome;
     cleanup(userConfigDir);
   });
 

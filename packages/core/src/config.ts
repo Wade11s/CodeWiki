@@ -17,7 +17,7 @@ export const DEFAULT_CONFIG: CodeWikiConfig = {
 };
 
 function getUserConfigPath(): string {
-  const home = process.env.CODEWIKI_TEST_HOME || homedir();
+  const home = process.env.HOME || process.env.USERPROFILE || homedir();
   return join(home, ".codewiki", "config.json");
 }
 
@@ -50,6 +50,10 @@ function deepMergeScan(
   return {
     interactiveConfig: override.interactiveConfig ?? base.interactiveConfig,
   };
+}
+
+function isDefined(value: unknown): boolean {
+  return value !== undefined && value !== null;
 }
 
 export function loadConfig(repoPath?: string): CodeWikiConfig {
@@ -88,13 +92,12 @@ function getConfigSource(
   userValue: unknown,
   repoValue: unknown
 ): ConfigSource {
-  if (repoPath && repoValue !== undefined && repoValue !== null) return "repo";
-  if (userValue !== undefined && userValue !== null) return "user";
+  if (repoPath && isDefined(repoValue)) return "repo";
+  if (isDefined(userValue)) return "user";
   return "default";
 }
 
 export function loadConfigWithSources(repoPath?: string): {
-  config: CodeWikiConfig;
   agent: EffectiveAgentConfig;
   scan: EffectiveScanConfig;
 } {
@@ -151,7 +154,7 @@ export function loadConfigWithSources(repoPath?: string): {
     source: getConfigSource("interactiveConfig" as never, repoPath, userScan?.interactiveConfig, repoScan?.interactiveConfig),
   };
 
-  return { config, agent, scan };
+  return { agent, scan };
 }
 
 export interface PartialCodeWikiConfig {

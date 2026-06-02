@@ -15,7 +15,7 @@ function determineHealth(status: number | null, version: string | null): HealthS
   return "unavailable";
 }
 
-function detectAgent(name: string, command: string, args: string[]): DetectedAgent {
+export function detectAgent(name: string, command: string, args: string[]): DetectedAgent {
   try {
     const result = spawnSync(command, args, {
       encoding: "utf-8",
@@ -75,12 +75,9 @@ export async function agentsCommand(options: { json?: boolean }): Promise<void> 
     console.log(`  ${agent.name}: ${status}${marker}`);
   }
 
-  if (available.length > 1) {
-    const currentDefault = agents.find((a) => a.default);
-    if (currentDefault) {
-      console.log(`\nDefault provider: ${currentDefault.name}`);
-      console.log("Run 'codewiki agents --select' to change (not yet supported via flag)");
-    }
+  if (available.length > 1 && process.stdin.isTTY) {
+    console.log("");
+    await promptSelectProvider(available, config.agent.default);
   }
 }
 
@@ -95,8 +92,13 @@ export async function selectAgentCommand(): Promise<void> {
   }
 
   const config = loadConfig();
-  const currentDefault = config.agent.default;
+  await promptSelectProvider(available, config.agent.default);
+}
 
+async function promptSelectProvider(
+  available: DetectedAgent[],
+  currentDefault: string
+): Promise<void> {
   // Lazy-load inquirer only when needed for interactivity
   const { select } = await import("@inquirer/prompts");
 
