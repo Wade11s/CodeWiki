@@ -112,6 +112,8 @@ export interface FeatureCandidateGroup {
   candidates: FeatureCandidate[];
 }
 
+export type TaskState = "pending" | "running" | "success" | "failed" | "timeout";
+
 export interface TaskResult {
   taskId: string;
   exitCode: number;
@@ -120,6 +122,7 @@ export interface TaskResult {
   stderr: string;
   retries: number;
   validationErrors: string[];
+  state: TaskState;
 }
 
 export interface AgentProvider {
@@ -131,5 +134,37 @@ export interface AgentProvider {
     inputArtifacts: string[];
     outputSchema: string;
     timeoutSeconds: number;
+    retries: number;
   }): Promise<TaskResult>;
+}
+
+export interface TaskRunRecord {
+  taskId: string;
+  prompt: string;
+  inputArtifacts: string[];
+  outputSchema: string;
+  state: TaskState;
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+  durationMs: number;
+  retries: number;
+  validationErrors: string[];
+  startedAt: string;
+  completedAt: string;
+}
+
+export interface RunRecord {
+  runId: string;
+  repoPath: string;
+  providerName: string;
+  startedAt: string;
+  completedAt: string;
+  tasks: TaskRunRecord[];
+  summary: {
+    total: number;
+    success: number;
+    failed: number;
+    timedOut: number;
+  };
 }

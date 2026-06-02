@@ -113,3 +113,47 @@ export const FeatureCandidateGroupSchema = z.object({
   description: z.string().optional(),
   candidates: z.array(FeatureCandidateSchema),
 });
+
+export const TaskStateSchema = z.enum(["pending", "running", "success", "failed", "timeout"]);
+
+export const TaskResultSchema = z.object({
+  taskId: z.string(),
+  exitCode: z.number(),
+  durationMs: z.number().int().min(0),
+  stdout: z.string(),
+  stderr: z.string(),
+  retries: z.number().int().min(0),
+  validationErrors: z.array(z.string()),
+  state: TaskStateSchema,
+});
+
+export const TaskRunRecordSchema = z.object({
+  taskId: z.string(),
+  prompt: z.string(),
+  inputArtifacts: z.array(z.string()),
+  outputSchema: z.string(),
+  state: TaskStateSchema,
+  exitCode: z.number(),
+  stdout: z.string(),
+  stderr: z.string(),
+  durationMs: z.number().int().min(0),
+  retries: z.number().int().min(0),
+  validationErrors: z.array(z.string()),
+  startedAt: z.string().datetime(),
+  completedAt: z.string().datetime(),
+});
+
+export const RunRecordSchema = z.object({
+  runId: z.string(),
+  repoPath: z.string(),
+  providerName: z.string(),
+  startedAt: z.string().datetime(),
+  completedAt: z.string().datetime(),
+  tasks: z.array(TaskRunRecordSchema),
+  summary: z.object({
+    total: z.number().int().min(0),
+    success: z.number().int().min(0),
+    failed: z.number().int().min(0),
+    timedOut: z.number().int().min(0),
+  }),
+});
