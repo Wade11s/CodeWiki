@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readSnapshot, loadConfigWithSources, isSnapshotStale, countCandidates, SkippedFilesArtifactSchema, SkipReasonSchema } from "@codewiki/core";
+import { readSnapshot, loadConfigWithSources, isSnapshotStale, countCandidates, RunStore, SkippedFilesArtifactSchema, SkipReasonSchema } from "@codewiki/core";
 import type { SkippedFilesArtifact, SkipReason, FeatureCandidateGroup } from "@codewiki/core";
 
 function readSkippedFiles(repoPath: string): SkippedFilesArtifact | null {
@@ -41,6 +41,23 @@ function readFeatureCandidates(repoPath: string): FeatureCandidateGroup[] {
   }
 }
 
+function getFailedTasks(repoPath: string): Array<{ taskId: string; state: string; summary: string }> {
+  const codewikiDir = join(repoPath, ".codewiki");
+  if (!existsSync(codewikiDir)) return [];
+
+  const store = new RunStore(codewikiDir);
+  const latestRun = store.getLatestRun();
+  if (!latestRun) return [];
+
+  return latestRun.tasks
+    .filter((t) => t.state === "failed" || t.state === "timeout")
+    .map((t) => ({
+      taskId: t.taskId,
+      state: t.state,
+      summary: t.stderr.slice(0, 120) || t.validationErrors[0] || "No details",
+    }));
+}
+
 export async function statusCommand(repoPath: string, options: { json?: boolean }): Promise<void> {
   const snapshot = readSnapshot(repoPath);
   const { agent, scan } = loadConfigWithSources(repoPath);
@@ -54,6 +71,7 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
   const stale = snapshot ? isSnapshotStale(repoPath, snapshot) : false;
   const candidateGroups = readFeatureCandidates(repoPath);
   const candidateCount = countCandidates(candidateGroups);
+  const failedTasks = getFailedTasks(repoPath);
 
   const status = {
     codewikiExists: exists,
@@ -75,7 +93,8 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
     schemaVersion: snapshot ? snapshot.schemaVersion : null,
     skippedFiles: totalSkipped,
     skippedByReason: skippedCounts,
-    failedTasks: 0,
+    failedTasks: failedTasks.length,
+    failedTaskSummaries: failedTasks,
     candidateCount,
     candidateGroups: candidateGroups.length,
   };
@@ -111,6 +130,13 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
         if (count > 0) {
           console.log(`  ${reason}: ${count}`);
         }
+      }
+    }
+    if (failedTasks.length > 0) {
+      console.log("");
+      console.log(`Failed tasks: ${failedTasks.length}`);
+      for (const task of failedTasks) {
+        console.log(`  ${task.taskId} (${task.state}): ${task.summary}`);
       }
     }
   }
