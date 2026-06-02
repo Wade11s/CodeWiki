@@ -338,7 +338,7 @@ export class AgentRunner {
         taskId: resultWithRetries.taskId,
         prompt: options.prompt,
         inputArtifacts: options.inputArtifacts,
-        outputSchema: resultWithRetries.outputSchema,
+        outputSchema: options.outputSchema,
         state: resultWithRetries.state,
         exitCode: resultWithRetries.exitCode,
         stdout: resultWithRetries.stdout,
