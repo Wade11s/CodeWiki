@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { createSnapshot, writeSnapshot, loadConfig, writeRepoConfig, extractFeatureCandidates } from "@codewiki/core";
+import { createSnapshot, writeSnapshot, loadConfig, writeRepoConfig, extractFeatureCandidates, CodeWikiError } from "@codewiki/core";
 import { generateSite } from "../site-generator.js";
 import { shouldSkipFile, shouldSkipDir, isCodewikiIgnored, addCodewikiToGitignore } from "@codewiki/core";
 import type { SkippedFile, ScanConfig } from "@codewiki/core";
@@ -156,16 +156,14 @@ async function promptAddToGitignore(
 function parseValidatedInt(value: string, min: number, name: string): number {
   const parsed = parseInt(value, 10);
   if (Number.isNaN(parsed) || parsed < min) {
-    console.error(`Error: Invalid ${name} "${value}". Expected an integer >= ${min}.`);
-    process.exit(1);
+    throw new CodeWikiError(`Error: Invalid ${name} "${value}". Expected an integer >= ${min}.`);
   }
   return parsed;
 }
 
 export async function scanCommand(repoPath: string, options: ScanOptions): Promise<void> {
   if (!existsSync(repoPath)) {
-    console.error(`Error: Repository path does not exist: ${repoPath}`);
-    process.exit(1);
+    throw new CodeWikiError(`Error: Repository path does not exist: ${repoPath}`);
   }
 
   const config = loadConfig(repoPath);

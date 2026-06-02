@@ -1,6 +1,7 @@
 import { createServer } from "node:http";
 import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, extname, resolve } from "node:path";
+import { CodeWikiError } from "@codewiki/core";
 
 const MIME_TYPES: Record<string, string> = {
   ".html": "text/html",
@@ -20,8 +21,7 @@ function getMimeType(filePath: string): string {
 export async function serveCommand(repoPath: string, options: { port?: string }): Promise<void> {
   const siteDir = join(repoPath, ".codewiki", "site");
   if (!existsSync(siteDir)) {
-    console.error(`Error: No site directory found at ${siteDir}. Run 'codewiki scan ${repoPath}' first.`);
-    process.exit(1);
+    throw new CodeWikiError(`Error: No site directory found at ${siteDir}. Run 'codewiki scan ${repoPath}' first.`);
   }
 
   const port = parseInt(options.port || "3000", 10);

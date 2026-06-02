@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadConfig, loadConfigWithSources, writeRepoConfig, writeUserConfig } from "@codewiki/core";
+import { loadConfig, loadConfigWithSources, writeRepoConfig, writeUserConfig, CodeWikiError } from "@codewiki/core";
 import { scanCommand } from "../src/commands/scan.js";
 import { statusCommand } from "../src/commands/status.js";
 import { agentsCommand, detectAgent } from "../src/commands/agents.js";
@@ -321,7 +321,7 @@ describe("scan one-off overrides", () => {
     const repo = createTempRepo("scan-override");
     addFile(repo, "x.js", "const x = 1;\n");
 
-    await scanCommand(repo, { nonInteractive: true, concurrency: "99", timeout: "1", retries: "0" });
+    await scanCommand(repo, { concurrency: "99", timeout: "1", retries: "0", nonInteractive: true });
 
     // No config should be written
     expect(existsSync(join(repo, ".codewiki", "config.json"))).toBe(false);
@@ -333,7 +333,7 @@ describe("scan one-off overrides", () => {
     const repo = createTempRepo("scan-write");
     addFile(repo, "x.js", "const x = 1;\n");
 
-    await scanCommand(repo, { nonInteractive: true, concurrency: "99", timeout: "1", retries: "0", agent: "claude", writeConfig: true });
+    await scanCommand(repo, { concurrency: "99", timeout: "1", retries: "0", agent: "claude", writeConfig: true, nonInteractive: true });
 
     const configPath = join(repo, ".codewiki", "config.json");
     expect(existsSync(configPath)).toBe(true);
@@ -351,7 +351,7 @@ describe("scan one-off overrides", () => {
     const repo = createTempRepo("scan-agent");
     addFile(repo, "y.js", "const y = 2;\n");
 
-    await scanCommand(repo, { nonInteractive: true, agent: "claude" });
+    await scanCommand(repo, { agent: "claude", nonInteractive: true });
 
     expect(existsSync(join(repo, ".codewiki", "config.json"))).toBe(false);
 
@@ -362,24 +362,16 @@ describe("scan one-off overrides", () => {
     const repo = createTempRepo("scan-invalid-concurrency");
     addFile(repo, "z.js", "const z = 3;\n");
 
-    let exitCode: number | undefined;
-    const originalExit = process.exit;
-    process.exit = ((code?: number) => { exitCode = code; throw new Error(`exit ${code}`); }) as typeof process.exit;
-    const originalError = console.error;
-    let stderr = "";
-    console.error = (...args: unknown[]) => { stderr += args.join(" ") + "\n"; };
-
+    let err: unknown;
     try {
-      await scanCommand(repo, { nonInteractive: true, concurrency: "abc" });
-    } catch {
-      // expected
+      await scanCommand(repo, { concurrency: "abc" });
+    } catch (e) {
+      err = e;
     }
 
-    process.exit = originalExit;
-    console.error = originalError;
-
-    expect(exitCode).toBe(1);
-    expect(stderr).toContain("Invalid concurrency");
+    expect(err).toBeInstanceOf(CodeWikiError);
+    expect((err as CodeWikiError).exitCode).toBe(1);
+    expect((err as Error).message).toContain("Invalid concurrency");
 
     cleanup(repo);
   });
@@ -388,24 +380,16 @@ describe("scan one-off overrides", () => {
     const repo = createTempRepo("scan-negative-timeout");
     addFile(repo, "w.js", "const w = 4;\n");
 
-    let exitCode: number | undefined;
-    const originalExit = process.exit;
-    process.exit = ((code?: number) => { exitCode = code; throw new Error(`exit ${code}`); }) as typeof process.exit;
-    const originalError = console.error;
-    let stderr = "";
-    console.error = (...args: unknown[]) => { stderr += args.join(" ") + "\n"; };
-
+    let err: unknown;
     try {
-      await scanCommand(repo, { nonInteractive: true, timeout: "-5" });
-    } catch {
-      // expected
+      await scanCommand(repo, { timeout: "-5" });
+    } catch (e) {
+      err = e;
     }
 
-    process.exit = originalExit;
-    console.error = originalError;
-
-    expect(exitCode).toBe(1);
-    expect(stderr).toContain("Invalid timeout");
+    expect(err).toBeInstanceOf(CodeWikiError);
+    expect((err as CodeWikiError).exitCode).toBe(1);
+    expect((err as Error).message).toContain("Invalid timeout");
 
     cleanup(repo);
   });
@@ -414,7 +398,7 @@ describe("scan one-off overrides", () => {
     const repo = createTempRepo("scan-zero-retries");
     addFile(repo, "v.js", "const v = 5;\n");
 
-    await scanCommand(repo, { nonInteractive: true, retries: "0" });
+    await scanCommand(repo, { retries: "0", nonInteractive: true });
 
     // Should succeed - no config written by default
     expect(existsSync(join(repo, ".codewiki", "config.json"))).toBe(false);
@@ -426,24 +410,16 @@ describe("scan one-off overrides", () => {
     const repo = createTempRepo("scan-negative-retries");
     addFile(repo, "u.js", "const u = 6;\n");
 
-    let exitCode: number | undefined;
-    const originalExit = process.exit;
-    process.exit = ((code?: number) => { exitCode = code; throw new Error(`exit ${code}`); }) as typeof process.exit;
-    const originalError = console.error;
-    let stderr = "";
-    console.error = (...args: unknown[]) => { stderr += args.join(" ") + "\n"; };
-
+    let err: unknown;
     try {
-      await scanCommand(repo, { nonInteractive: true, retries: "-1" });
-    } catch {
-      // expected
+      await scanCommand(repo, { retries: "-1" });
+    } catch (e) {
+      err = e;
     }
 
-    process.exit = originalExit;
-    console.error = originalError;
-
-    expect(exitCode).toBe(1);
-    expect(stderr).toContain("Invalid retries");
+    expect(err).toBeInstanceOf(CodeWikiError);
+    expect((err as CodeWikiError).exitCode).toBe(1);
+    expect((err as Error).message).toContain("Invalid retries");
 
     cleanup(repo);
   });

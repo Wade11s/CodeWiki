@@ -9,10 +9,13 @@ import { debugCommand } from "./src/commands/debug.js";
 import { askCommand } from "./src/commands/ask.js";
 import { serveCommand } from "./src/commands/serve.js";
 import { generateSite } from "./src/site-generator.js";
-import { clearGitignoreCache } from "@codewiki/core";
+import { clearGitignoreCache, CodeWikiError } from "@codewiki/core";
+
+const tempRepos: string[] = [];
 
 function createTempRepo(name: string): string {
   const dir = mkdtempSync(join(tmpdir(), `codewiki-fixture-${name}-`));
+  tempRepos.push(dir);
   return dir;
 }
 
@@ -22,6 +25,13 @@ function cleanup(dir: string): void {
   }
   clearGitignoreCache();
 }
+
+afterEach(() => {
+  for (const dir of tempRepos) {
+    cleanup(dir);
+  }
+  tempRepos.length = 0;
+});
 
 function addFile(dir: string, relPath: string, content: string): void {
   const fullPath = join(dir, relPath);
@@ -197,28 +207,16 @@ describe("Evidence fixtures", () => {
   it("ask requires a snapshot", async () => {
     const repo = createTempRepo("ask-nosnap");
 
-    let output = "";
-    const originalLog = console.log;
-    const originalError = console.error;
-    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
-    console.error = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
-
-    const originalExit = process.exit;
-    let exitCode: number | undefined;
-    process.exit = ((code?: number) => { exitCode = code; throw new Error(`exit ${code}`); }) as typeof process.exit;
-
+    let err: unknown;
     try {
       await askCommand(repo, "What is this?", {});
-    } catch {
-      // expected
+    } catch (e) {
+      err = e;
     }
 
-    console.log = originalLog;
-    console.error = originalError;
-    process.exit = originalExit;
-
-    expect(exitCode).toBe(1);
-    expect(output).toContain("No snapshot found");
+    expect(err).toBeInstanceOf(CodeWikiError);
+    expect((err as CodeWikiError).exitCode).toBe(1);
+    expect((err as Error).message).toContain("No snapshot found");
 
     cleanup(repo);
   });
