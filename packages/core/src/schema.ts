@@ -97,3 +97,19 @@ export const EffectiveScanConfigSchema = z.object({
   interactiveConfig: z.boolean(),
   source: ConfigSourceSchema,
 });
+
+export const FeatureCandidateSchema = z.object({
+  id: z.string(),
+  category: z.enum(["script", "cli", "route", "api", "ui-page", "test", "export", "readme-usage"]),
+  name: z.string(),
+  description: z.string().optional(),
+  evidence: z.array(EvidenceSchema),
+});
+
+export const FeatureCandidateGroupSchema = z.object({
+  id: z.string(),
+  category: FeatureCandidateSchema.shape.category,
+  name: z.string(),
+  description: z.string().optional(),
+  candidates: z.array(FeatureCandidateSchema),
+});
