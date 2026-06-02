@@ -1,0 +1,27 @@
+{
+  "name": "codewiki",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Local-first CLI for repository understanding",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "bun run --filter '*' build",
+    "lint": "tsc --noEmit",
+    "test": "bun test",
+    "test:fixtures": "bun test packages/cli/fixtures",
+    "test:integration": "bun test packages/cli/tests/integration",
+    "codewiki": "bun run packages/cli/dist/index.js",
+    "dev:cli": "bun run --filter cli dev",
+    "dev:site": "bun run --filter site dev"
+  },
+  "devDependencies": {
+    "@types/bun": "latest",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "bun": ">=1.1.0"
+  }
+}

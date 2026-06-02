@@ -1,0 +1,10 @@
+{
+  "name": "node-cli-fixture",
+  "version": "1.0.0",
+  "bin": {
+    "my-cli": "./bin/cli.js"
+  },
+  "scripts": {
+    "test": "node test.js"
+  }
+}

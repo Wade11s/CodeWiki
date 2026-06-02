@@ -1,26 +1,74 @@
 # CodeWiki
 
-CodeWiki is a planned local-first CLI for repository understanding. It will scan a code repository, generate a static report site, and provide an evidence-only `ask` command for other coding agents.
+Local-first CLI for repository understanding. Scan a codebase, generate a static report site, and ask evidence-only questions for other coding agents.
 
-## Current State
+## Workspace
 
-This repository currently contains the project context, architecture decisions, and Multica issue-tracker configuration used to build the MVP from issues.
+This is a Bun monorepo with three packages:
 
-Implementation work is tracked in Multica under `WADE-15` and its child issues. Agents should execute those issues against the GitHub repository resource attached to the Multica project, not against a local generated worktree.
+- `packages/cli` — CLI entrypoint and commands
+- `packages/core` — Shared types, schemas, snapshot logic, agent runner
+- `packages/site` — Vite + React report site
 
-## Docs
+## Development Commands
+
+```sh
+# Install dependencies
+bun install
+
+# Build all packages
+bun run build
+
+# Type check (no emit)
+bun run lint
+
+# Run fixture-based tests (deterministic, no real agent required)
+bun test
+
+# Run fixture tests explicitly
+bun run test:fixtures
+
+# Run Claude integration tests (requires local Claude CLI)
+bun run test:integration
+
+# Invoke the local CLI
+bun run codewiki -- <command> [args]
+
+# Watch mode for CLI
+bun run dev:cli
+
+# Watch mode for site
+bun run dev:site
+```
+
+## CLI Usage
+
+```sh
+# Scan a repository
+codewiki scan <repo>
+
+# Serve the generated report
+codewiki serve <repo> --port 3000
+
+# Ask a question (evidence-only)
+codewiki ask <repo> "<question>"
+
+# Check status
+codewiki status <repo>
+
+# Debug output
+codewiki debug <repo> --json
+
+# Detect local agents
+codewiki agents --json
+```
+
+## Runtime Target
+
+The published CLI targets Node.js LTS. Runtime code avoids Bun-only APIs.
+
+## Project Context
 
 - [Project context](CONTEXT.md)
 - [Architecture decisions](docs/adr/)
 - [Agent instructions](AGENTS.md)
-- [Issue tracker instructions](docs/agents/issue-tracker.md)
-
-## MVP Direction
-
-The accepted MVP direction is:
-
-- TypeScript implementation
-- Bun for development tooling
-- Node.js LTS runtime target
-- `packages/cli`, `packages/core`, and `packages/site` once implementation begins
-- `.codewiki/` as the generated local analysis artifact, ignored by Git
