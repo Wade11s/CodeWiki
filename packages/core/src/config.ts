@@ -51,6 +51,8 @@ function deepMergeScan(
 ): CodeWikiConfig["scan"] {
   return {
     interactiveConfig: override.interactiveConfig ?? base.interactiveConfig,
+    include: override.include ?? base.include,
+    exclude: override.exclude ?? base.exclude,
   };
 }
 

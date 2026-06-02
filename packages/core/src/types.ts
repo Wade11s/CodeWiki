@@ -24,6 +24,22 @@ export interface Evidence {
   relatedSymbols?: string[];
 }
 
+export interface FeatureCandidate {
+  id: string;
+  category: "script" | "cli" | "route" | "api" | "ui-page" | "test" | "export" | "readme-usage";
+  name: string;
+  description?: string;
+  evidence: Evidence[];
+}
+
+export interface FeatureCandidateGroup {
+  id: string;
+  category: FeatureCandidate["category"];
+  name: string;
+  description?: string;
+  candidates: FeatureCandidate[];
+}
+
 export interface Artifact {
   schemaVersion: string;
   snapshotId: string;

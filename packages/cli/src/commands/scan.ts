@@ -11,8 +11,8 @@ import {
 } from "@codewiki/core";
 import type { AgentRunner as AgentRunnerType } from "@codewiki/core";
 import { generateSite } from "../site-generator.js";
-import { shouldSkipFile, shouldSkipDir, isCodewikiIgnored, addCodewikiToGitignore } from "@codewiki/core";
-import type { SkippedFile, ScanConfig } from "@codewiki/core";
+import { shouldSkipFile, shouldSkipDir, isCodewikiIgnored, addCodewikiToGitignore, extractFeatureCandidates } from "@codewiki/core";
+import type { SkippedFile, ScanConfig, FeatureCandidateGroup } from "@codewiki/core";
 
 interface ScanOptions {
   concurrency?: string;
@@ -61,7 +61,7 @@ function scanDir(dir: string, root: string, scanConfig: ScanConfig): ScanResult 
   return { files, skipped };
 }
 
-function writeIndexArtifacts(codewikiDir: string, snapshotId: string, files: string[], skipped: SkippedFile[]): void {
+function writeIndexArtifacts(codewikiDir: string, snapshotId: string, files: string[], skipped: SkippedFile[], featureCandidates: FeatureCandidateGroup[]): void {
   const indexDir = join(codewikiDir, "index");
   mkdirSync(indexDir, { recursive: true });
 
@@ -94,7 +94,7 @@ function writeIndexArtifacts(codewikiDir: string, snapshotId: string, files: str
 
   writeFileSync(
     join(indexDir, "feature-candidates.json"),
-    JSON.stringify(envelope([]), null, 2)
+    JSON.stringify(envelope(featureCandidates), null, 2)
   );
 
   writeFileSync(
@@ -197,7 +197,8 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
   writeSnapshot(repoPath, snapshot);
 
   const { files, skipped } = scanDir(repoPath, repoPath, config.scan);
-  writeIndexArtifacts(codewikiDir, snapshot.id, files, skipped);
+  const featureCandidates = extractFeatureCandidates(repoPath, files);
+  writeIndexArtifacts(codewikiDir, snapshot.id, files, skipped, featureCandidates);
   writeArtifactFiles(codewikiDir, snapshot.id);
 
   // Set up runner
@@ -209,6 +210,7 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
 
   const scanConfig = {
     ...config.agent,
+    default: providerName,
     concurrency,
     timeoutSeconds,
     retries,

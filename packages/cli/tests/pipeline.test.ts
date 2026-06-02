@@ -187,7 +187,7 @@ describe("Pipeline acceptance criteria", () => {
     fake.setBehavior("validate");
     runner.register(fake);
 
-    await scanCommand(repo, { runner });
+    await scanCommand(repo, { runner, nonInteractive: true });
 
     const runPath = join(repo, ".codewiki", "runs");
     expect(existsSync(runPath)).toBe(true);
@@ -222,7 +222,7 @@ describe("Pipeline acceptance criteria", () => {
     selective.setFailModules(["lib"]);
     runner.register(selective);
 
-    await scanCommand(repo, { runner, agent: "selective-fake" });
+    await scanCommand(repo, { runner, agent: "selective-fake", nonInteractive: true });
 
     let output = "";
     const originalLog = console.log;
@@ -251,7 +251,7 @@ describe("Pipeline acceptance criteria", () => {
     selective.setInvalidEvidenceModules(["src"]);
     runner.register(selective);
 
-    await scanCommand(repo, { runner, agent: "selective-fake" });
+    await scanCommand(repo, { runner, agent: "selective-fake", nonInteractive: true });
 
     let output = "";
     const originalLog = console.log;
@@ -275,7 +275,7 @@ describe("Pipeline acceptance criteria", () => {
     selective.setFlakyModule("src", 2);
     runner.register(selective);
 
-    await scanCommand(repo, { runner, agent: "selective-fake", retries: "3" });
+    await scanCommand(repo, { runner, agent: "selective-fake", retries: "3", nonInteractive: true });
 
     let output = "";
     const originalLog = console.log;
@@ -299,7 +299,7 @@ describe("Pipeline acceptance criteria", () => {
     selective.setFlakyModule("src", 5);
     runner.register(selective);
 
-    await scanCommand(repo, { runner, agent: "selective-fake", retries: "2" });
+    await scanCommand(repo, { runner, agent: "selective-fake", retries: "2", nonInteractive: true });
 
     let output = "";
     const originalLog = console.log;
@@ -325,7 +325,7 @@ describe("Pipeline acceptance criteria", () => {
     selective.setFailModules(["lib"]);
     runner.register(selective);
 
-    await scanCommand(repo, { runner, agent: "selective-fake" });
+    await scanCommand(repo, { runner, agent: "selective-fake", nonInteractive: true });
 
     let output = "";
     const originalLog = console.log;

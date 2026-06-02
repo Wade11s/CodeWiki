@@ -100,7 +100,7 @@ export function partitionModules(files: string[]): ModulePartition[] {
   return modules;
 }
 
-export function extractFeatureCandidates(files: string[]): Array<{
+export function extractPipelineFeatureCandidates(files: string[]): Array<{
   filePath: string;
   candidateType: string;
   confidence: number;
@@ -231,7 +231,7 @@ export interface PipelineResult {
 export async function runPipeline(options: PipelineOptions): Promise<PipelineResult> {
   const { repoPath, snapshot, files, skippedFiles, config, providerName, runner, codewikiDir } = options;
 
-  const featureCandidates = extractFeatureCandidates(files);
+  const featureCandidates = extractPipelineFeatureCandidates(files);
   const modules = partitionModules(files);
 
   const runRecord = createRunRecord(snapshot.id, config, modules);

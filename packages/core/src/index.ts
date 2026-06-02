@@ -6,3 +6,4 @@ export * from "./ignore.js";
 export * from "./agent-runner.js";
 export * from "./validation.js";
 export * from "./pipeline.js";
+export * from "./feature-candidates.js";
