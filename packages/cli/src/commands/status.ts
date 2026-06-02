@@ -1,8 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readSnapshot, loadConfigWithSources, isSnapshotStale } from "@codewiki/core";
-import { SkippedFilesArtifactSchema, SkipReasonSchema } from "@codewiki/core";
-import type { SkippedFilesArtifact, SkipReason } from "@codewiki/core";
+import { readSnapshot, loadConfigWithSources, isSnapshotStale, countCandidates, SkippedFilesArtifactSchema, SkipReasonSchema } from "@codewiki/core";
+import type { SkippedFilesArtifact, SkipReason, FeatureCandidateGroup } from "@codewiki/core";
 
 function readSkippedFiles(repoPath: string): SkippedFilesArtifact | null {
   const path = join(repoPath, ".codewiki", "index", "skipped-files.json");
@@ -30,6 +29,18 @@ function countSkippedByReason(skipped: SkippedFilesArtifact | null): Record<Skip
   return counts;
 }
 
+function readFeatureCandidates(repoPath: string): FeatureCandidateGroup[] {
+  const path = join(repoPath, ".codewiki", "index", "feature-candidates.json");
+  if (!existsSync(path)) return [];
+  try {
+    const raw = readFileSync(path, "utf-8");
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed.data) ? parsed.data : [];
+  } catch {
+    return [];
+  }
+}
+
 export async function statusCommand(repoPath: string, options: { json?: boolean }): Promise<void> {
   const snapshot = readSnapshot(repoPath);
   const { agent, scan } = loadConfigWithSources(repoPath);
@@ -41,6 +52,8 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
   const exists = existsSync(codewikiDir);
 
   const stale = snapshot ? isSnapshotStale(repoPath, snapshot) : false;
+  const candidateGroups = readFeatureCandidates(repoPath);
+  const candidateCount = countCandidates(candidateGroups);
 
   const status = {
     codewikiExists: exists,
@@ -63,6 +76,8 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
     skippedFiles: totalSkipped,
     skippedByReason: skippedCounts,
     failedTasks: 0,
+    candidateCount,
+    candidateGroups: candidateGroups.length,
   };
 
   if (options.json) {
@@ -78,6 +93,7 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
       console.log(`Dirty: ${snapshot.gitDirty}`);
       console.log(`Files: ${snapshot.fileCount}`);
       console.log(`Stale: ${stale}`);
+      console.log(`Feature candidates: ${candidateCount} (${candidateGroups.length} groups)`);
     } else {
       console.log("No snapshot found. Run 'codewiki scan' first.");
     }

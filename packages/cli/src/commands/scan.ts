@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
-import { createSnapshot, writeSnapshot, loadConfig, writeRepoConfig } from "@codewiki/core";
+import { createSnapshot, writeSnapshot, loadConfig, writeRepoConfig, extractFeatureCandidates } from "@codewiki/core";
 import { generateSite } from "../site-generator.js";
 import { shouldSkipFile, shouldSkipDir, isCodewikiIgnored, addCodewikiToGitignore } from "@codewiki/core";
 import type { SkippedFile, ScanConfig } from "@codewiki/core";
@@ -51,7 +51,7 @@ function scanDir(dir: string, root: string, scanConfig: ScanConfig): ScanResult 
   return { files, skipped };
 }
 
-function writeIndexArtifacts(codewikiDir: string, snapshotId: string, files: string[], skipped: SkippedFile[]): void {
+function writeIndexArtifacts(codewikiDir: string, snapshotId: string, files: string[], skipped: SkippedFile[], repoPath: string): void {
   const indexDir = join(codewikiDir, "index");
   mkdirSync(indexDir, { recursive: true });
 
@@ -82,9 +82,10 @@ function writeIndexArtifacts(codewikiDir: string, snapshotId: string, files: str
     JSON.stringify(envelope([]), null, 2)
   );
 
+  const featureCandidates = extractFeatureCandidates(repoPath, files);
   writeFileSync(
     join(indexDir, "feature-candidates.json"),
-    JSON.stringify(envelope([]), null, 2)
+    JSON.stringify(envelope(featureCandidates), null, 2)
   );
 
   writeFileSync(
@@ -190,7 +191,7 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
   writeSnapshot(repoPath, snapshot);
 
   const { files, skipped } = scanDir(repoPath, repoPath, config.scan);
-  writeIndexArtifacts(codewikiDir, snapshot.id, files, skipped);
+  writeIndexArtifacts(codewikiDir, snapshot.id, files, skipped, repoPath);
   writeArtifactFiles(codewikiDir, snapshot.id);
 
   if (options.writeConfig) {
