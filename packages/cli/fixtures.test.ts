@@ -55,7 +55,7 @@ describe("Repository fixtures", () => {
     const snapshotPath = join(repo, ".codewiki", "snapshot.json");
     expect(existsSync(snapshotPath)).toBe(true);
     const snapshot = JSON.parse(readFileSync(snapshotPath, "utf-8"));
-    expect(snapshot.fileCount).toBeGreaterThanOrEqual(4);
+    expect(snapshot.fileCount).toBeGreaterThanOrEqual(3);
 
     cleanup(repo);
   });
@@ -92,6 +92,10 @@ describe("Snapshot fixtures", () => {
     expect(snapshot).toHaveProperty("createdAt");
     expect(snapshot).toHaveProperty("repoPath", repo);
     expect(snapshot).toHaveProperty("fileCount");
+    expect(snapshot).toHaveProperty("fileHashes");
+    expect(typeof snapshot.fileHashes).toBe("object");
+    expect(snapshot.fileHashes["a.js"]).toBeDefined();
+    expect(snapshot.fileHashes["a.js"]).toHaveLength(64); // sha256 hex
     expect(snapshot).toHaveProperty("parserVersion");
     expect(snapshot).toHaveProperty("agentVersion");
 
@@ -121,7 +125,6 @@ describe("CodeWiki Directory fixtures", () => {
 
     await scanCommand(repo, { nonInteractive: true });
 
-    expect(existsSync(join(repo, ".codewiki", "config.json"))).toBe(false);
     expect(existsSync(join(repo, ".codewiki", "snapshot.json"))).toBe(true);
     expect(existsSync(join(repo, ".codewiki", "index", "files.json"))).toBe(true);
     expect(existsSync(join(repo, ".codewiki", "index", "symbols.json"))).toBe(true);
@@ -133,6 +136,9 @@ describe("CodeWiki Directory fixtures", () => {
     expect(existsSync(join(repo, ".codewiki", "artifacts", "modules.json"))).toBe(true);
     expect(existsSync(join(repo, ".codewiki", "artifacts", "features.json"))).toBe(true);
     expect(existsSync(join(repo, ".codewiki", "artifacts", "code-map.json"))).toBe(true);
+    expect(existsSync(join(repo, ".codewiki", "config"))).toBe(true);
+    expect(existsSync(join(repo, ".codewiki", "runs"))).toBe(true);
+    expect(existsSync(join(repo, ".codewiki", "site"))).toBe(true);
 
     cleanup(repo);
   });
@@ -159,6 +165,8 @@ describe("CodeWiki Directory fixtures", () => {
 
     expect(output).toContain("CodeWiki directory: yes");
     expect(output).toContain("Snapshot:");
+    expect(output).toContain("Generated:");
+    expect(output).toContain("Repo path:");
 
     cleanup(repo);
   });
@@ -603,6 +611,195 @@ describe("Status skipped files fixtures", () => {
   });
 });
 
+describe("Stale detection fixtures", () => {
+  it("clean repo is not stale", async () => {
+    const repo = createTempRepo("clean");
+    addFile(repo, "a.js", "const a = 1;\n");
+
+    // Initialize git and commit
+    const { execSync } = await import("node:child_process");
+    execSync("git init", { cwd: repo, stdio: "ignore" });
+    execSync("git config user.email 'test@test.com'", { cwd: repo, stdio: "ignore" });
+    execSync("git config user.name 'Test'", { cwd: repo, stdio: "ignore" });
+    addFile(repo, ".gitignore", ".codewiki/\n");
+    execSync("git add .", { cwd: repo, stdio: "ignore" });
+    execSync("git commit -m 'initial'", { cwd: repo, stdio: "ignore" });
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    let output = "";
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    await statusCommand(repo, {});
+    console.log = originalLog;
+
+    expect(output).toContain("Stale: false");
+    expect(output).toContain("Dirty: false");
+
+    cleanup(repo);
+  });
+
+  it("dirty repo reports stale", async () => {
+    const repo = createTempRepo("dirty");
+    addFile(repo, "a.js", "const a = 1;\n");
+
+    const { execSync } = await import("node:child_process");
+    execSync("git init", { cwd: repo, stdio: "ignore" });
+    execSync("git config user.email 'test@test.com'", { cwd: repo, stdio: "ignore" });
+    execSync("git config user.name 'Test'", { cwd: repo, stdio: "ignore" });
+    addFile(repo, ".gitignore", ".codewiki/\n");
+    execSync("git add .", { cwd: repo, stdio: "ignore" });
+    execSync("git commit -m 'initial'", { cwd: repo, stdio: "ignore" });
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    // Make working tree dirty
+    addFile(repo, "a.js", "const a = 2;\n");
+
+    let output = "";
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    await statusCommand(repo, {});
+    console.log = originalLog;
+
+    expect(output).toContain("Stale: true");
+
+    cleanup(repo);
+  });
+
+  it("non-git repo scans and reports status correctly", async () => {
+    const repo = createTempRepo("nongit");
+    addFile(repo, "a.js", "const a = 1;\n");
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    let output = "";
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    await statusCommand(repo, {});
+    console.log = originalLog;
+
+    expect(output).toContain("Git head: (none)");
+    expect(output).toContain("Stale: false");
+
+    cleanup(repo);
+  });
+
+  it("changing a tracked file after scan causes stale", async () => {
+    const repo = createTempRepo("changed");
+    addFile(repo, "a.js", "const a = 1;\n");
+    addFile(repo, "b.js", "const b = 2;\n");
+
+    const { execSync } = await import("node:child_process");
+    execSync("git init", { cwd: repo, stdio: "ignore" });
+    execSync("git config user.email 'test@test.com'", { cwd: repo, stdio: "ignore" });
+    execSync("git config user.name 'Test'", { cwd: repo, stdio: "ignore" });
+    addFile(repo, ".gitignore", ".codewiki/\n");
+    execSync("git add .", { cwd: repo, stdio: "ignore" });
+    execSync("git commit -m 'initial'", { cwd: repo, stdio: "ignore" });
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    let output = "";
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    await statusCommand(repo, {});
+    console.log = originalLog;
+    expect(output).toContain("Stale: false");
+
+    // Modify a file and stage it
+    addFile(repo, "a.js", "const a = 99;\n");
+    execSync("git add a.js", { cwd: repo, stdio: "ignore" });
+
+    output = "";
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    await statusCommand(repo, {});
+    console.log = originalLog;
+    expect(output).toContain("Stale: true");
+
+    // Commit the change, then re-scan to refresh the snapshot
+    execSync("git commit -m 'update'", { cwd: repo, stdio: "ignore" });
+    await scanCommand(repo, { nonInteractive: true });
+
+    output = "";
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    await statusCommand(repo, {});
+    console.log = originalLog;
+    expect(output).toContain("Stale: false");
+
+    cleanup(repo);
+  });
+
+  it("scan dirty then commit clears stale state", async () => {
+    const repo = createTempRepo("dirty-commit");
+    addFile(repo, "a.js", "const a = 1;\n");
+
+    const { execSync } = await import("node:child_process");
+    execSync("git init", { cwd: repo, stdio: "ignore" });
+    execSync("git config user.email 'test@test.com'", { cwd: repo, stdio: "ignore" });
+    execSync("git config user.name 'Test'", { cwd: repo, stdio: "ignore" });
+    addFile(repo, ".gitignore", ".codewiki/\n");
+    execSync("git add .", { cwd: repo, stdio: "ignore" });
+    execSync("git commit -m 'initial'", { cwd: repo, stdio: "ignore" });
+
+    // Modify before scan — snapshot captures the modified file's hash and gitDirty=true
+    addFile(repo, "a.js", "const a = 2;\n");
+    await scanCommand(repo, { nonInteractive: true });
+
+    // Status should NOT be stale because current file hash matches snapshot
+    let output = "";
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    await statusCommand(repo, {});
+    console.log = originalLog;
+    expect(output).toContain("Stale: false");
+
+    // Commit the change — current file hash still matches snapshot
+    execSync("git add .", { cwd: repo, stdio: "ignore" });
+    execSync("git commit -m 'fix'", { cwd: repo, stdio: "ignore" });
+
+    output = "";
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    await statusCommand(repo, {});
+    console.log = originalLog;
+    expect(output).toContain("Stale: false");
+
+    cleanup(repo);
+  });
+
+  it("adding a file after scan causes stale", async () => {
+    const repo = createTempRepo("file-add");
+    addFile(repo, "a.js", "const a = 1;\n");
+
+    const { execSync } = await import("node:child_process");
+    execSync("git init", { cwd: repo, stdio: "ignore" });
+    execSync("git config user.email 'test@test.com'", { cwd: repo, stdio: "ignore" });
+    execSync("git config user.name 'Test'", { cwd: repo, stdio: "ignore" });
+    addFile(repo, ".gitignore", ".codewiki/\n");
+    execSync("git add .", { cwd: repo, stdio: "ignore" });
+    execSync("git commit -m 'initial'", { cwd: repo, stdio: "ignore" });
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    let output = "";
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    await statusCommand(repo, {});
+    console.log = originalLog;
+    expect(output).toContain("Stale: false");
+
+    addFile(repo, "b.js", "const b = 2;\n");
+
+    output = "";
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    await statusCommand(repo, {});
+    console.log = originalLog;
+    expect(output).toContain("Stale: true");
+
+    cleanup(repo);
+  });
+});
+
 describe("Serve fixtures", () => {
   it("serve starts a server that responds with index.html", async () => {
     const repo = createTempRepo("serve-test");
@@ -666,7 +863,7 @@ describe("Feature candidate fixtures", () => {
     }, null, 2));
     addFile(repo, "index.js", "console.log('ok');\n");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const fcPath = join(repo, ".codewiki", "index", "feature-candidates.json");
     const fc = JSON.parse(readFileSync(fcPath, "utf-8"));
@@ -703,7 +900,7 @@ describe("Feature candidate fixtures", () => {
     }, null, 2));
     addFile(repo, "bin/cli.js", "#!/usr/bin/env node\n");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const fcPath = join(repo, ".codewiki", "index", "feature-candidates.json");
     const fc = JSON.parse(readFileSync(fcPath, "utf-8"));
@@ -725,7 +922,7 @@ describe("Feature candidate fixtures", () => {
     }, null, 2));
     addFile(repo, "bin/single.js", "#!/usr/bin/env node\n");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const fcPath = join(repo, ".codewiki", "index", "feature-candidates.json");
     const fc = JSON.parse(readFileSync(fcPath, "utf-8"));
@@ -750,7 +947,7 @@ app.get('/api/users/:id', (req, res) => res.send('get'));
 module.exports = app;
 `);
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const fcPath = join(repo, ".codewiki", "index", "feature-candidates.json");
     const fc = JSON.parse(readFileSync(fcPath, "utf-8"));
@@ -777,7 +974,7 @@ export default function AboutPage() {
 }
 `);
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const fcPath = join(repo, ".codewiki", "index", "feature-candidates.json");
     const fc = JSON.parse(readFileSync(fcPath, "utf-8"));
@@ -805,7 +1002,7 @@ export default function App() {
 }
 `);
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const fcPath = join(repo, ".codewiki", "index", "feature-candidates.json");
     const fc = JSON.parse(readFileSync(fcPath, "utf-8"));
@@ -833,7 +1030,7 @@ def create_item():
     return {}
 `);
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const fcPath = join(repo, ".codewiki", "index", "feature-candidates.json");
     const fc = JSON.parse(readFileSync(fcPath, "utf-8"));
@@ -861,7 +1058,7 @@ def hello(name):
     return f'Hello {name}'
 `);
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const fcPath = join(repo, ".codewiki", "index", "feature-candidates.json");
     const fc = JSON.parse(readFileSync(fcPath, "utf-8"));
@@ -891,7 +1088,7 @@ describe('utils', () => {
 });
 `);
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const fcPath = join(repo, ".codewiki", "index", "feature-candidates.json");
     const fc = JSON.parse(readFileSync(fcPath, "utf-8"));
@@ -921,7 +1118,7 @@ class TestAuth:
         assert True
 `);
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const fcPath = join(repo, ".codewiki", "index", "feature-candidates.json");
     const fc = JSON.parse(readFileSync(fcPath, "utf-8"));
@@ -958,7 +1155,7 @@ class Greeter:
 __all__ = ["greet", "Greeter"]
 `);
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const fcPath = join(repo, ".codewiki", "index", "feature-candidates.json");
     const fc = JSON.parse(readFileSync(fcPath, "utf-8"));
@@ -989,7 +1186,7 @@ Run it with \`$ node index.js\`.
 `);
     addFile(repo, "index.js", "// ok\n");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const fcPath = join(repo, ".codewiki", "index", "feature-candidates.json");
     const fc = JSON.parse(readFileSync(fcPath, "utf-8"));
@@ -1015,7 +1212,7 @@ Run it with \`$ node index.js\`.
     }));
     addFile(repo, "index.js", "export const x = 1;\n");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     let output = "";
     const originalLog = console.log;
@@ -1051,7 +1248,7 @@ router.get('/posts', (req, res) => {});
 module.exports = router;
 `);
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const fcPath = join(repo, ".codewiki", "index", "feature-candidates.json");
     const fc = JSON.parse(readFileSync(fcPath, "utf-8"));

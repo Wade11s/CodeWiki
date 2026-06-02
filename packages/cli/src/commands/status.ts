@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readSnapshot, loadConfigWithSources, countCandidates, RunStore, SkippedFilesArtifactSchema, SkipReasonSchema } from "@codewiki/core";
+import { readSnapshot, loadConfigWithSources, isSnapshotStale, countCandidates, RunStore, SkippedFilesArtifactSchema, SkipReasonSchema } from "@codewiki/core";
 import type { SkippedFilesArtifact, SkipReason, FeatureCandidateGroup } from "@codewiki/core";
 
 function readSkippedFiles(repoPath: string): SkippedFilesArtifact | null {
@@ -68,6 +68,7 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
   const codewikiDir = join(repoPath, ".codewiki");
   const exists = existsSync(codewikiDir);
 
+  const stale = snapshot ? isSnapshotStale(repoPath, snapshot) : false;
   const candidateGroups = readFeatureCandidates(repoPath);
   const candidateCount = countCandidates(candidateGroups);
   const failedTasks = getFailedTasks(repoPath);
@@ -88,7 +89,7 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
         source: scan.source,
       },
     },
-    stale: snapshot ? snapshot.gitDirty : false,
+    stale,
     schemaVersion: snapshot ? snapshot.schemaVersion : null,
     skippedFiles: totalSkipped,
     skippedByReason: skippedCounts,
@@ -105,10 +106,12 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
     if (snapshot) {
       console.log(`Snapshot: ${snapshot.id}`);
       console.log(`Schema version: ${snapshot.schemaVersion}`);
+      console.log(`Generated: ${snapshot.createdAt}`);
+      console.log(`Repo path: ${snapshot.repoPath}`);
       console.log(`Git head: ${snapshot.gitHead || "(none)"}`);
       console.log(`Dirty: ${snapshot.gitDirty}`);
       console.log(`Files: ${snapshot.fileCount}`);
-      console.log(`Stale: ${status.stale}`);
+      console.log(`Stale: ${stale}`);
       console.log(`Feature candidates: ${candidateCount} (${candidateGroups.length} groups)`);
     } else {
       console.log("No snapshot found. Run 'codewiki scan' first.");

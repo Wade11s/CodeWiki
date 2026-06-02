@@ -15,6 +15,7 @@ export const SnapshotSchema = z.object({
   gitHead: z.string().nullable(),
   gitDirty: z.boolean(),
   fileCount: z.number().int().min(0),
+  fileHashes: z.record(z.string()),
   parserVersion: z.string(),
   agentVersion: z.string(),
 });

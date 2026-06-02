@@ -11,6 +11,7 @@ export interface Snapshot {
   gitHead: string | null;
   gitDirty: boolean;
   fileCount: number;
+  fileHashes: Record<string, string>;
   parserVersion: string;
   agentVersion: string;
 }

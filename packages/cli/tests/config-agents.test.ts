@@ -321,7 +321,7 @@ describe("scan one-off overrides", () => {
     const repo = createTempRepo("scan-override");
     addFile(repo, "x.js", "const x = 1;\n");
 
-    await scanCommand(repo, { concurrency: "99", timeout: "1", retries: "0" });
+    await scanCommand(repo, { nonInteractive: true, concurrency: "99", timeout: "1", retries: "0" });
 
     // No config should be written
     expect(existsSync(join(repo, ".codewiki", "config.json"))).toBe(false);
@@ -333,7 +333,7 @@ describe("scan one-off overrides", () => {
     const repo = createTempRepo("scan-write");
     addFile(repo, "x.js", "const x = 1;\n");
 
-    await scanCommand(repo, { concurrency: "99", timeout: "1", retries: "0", agent: "claude", writeConfig: true });
+    await scanCommand(repo, { nonInteractive: true, concurrency: "99", timeout: "1", retries: "0", agent: "claude", writeConfig: true });
 
     const configPath = join(repo, ".codewiki", "config.json");
     expect(existsSync(configPath)).toBe(true);
@@ -351,7 +351,7 @@ describe("scan one-off overrides", () => {
     const repo = createTempRepo("scan-agent");
     addFile(repo, "y.js", "const y = 2;\n");
 
-    await scanCommand(repo, { agent: "claude" });
+    await scanCommand(repo, { nonInteractive: true, agent: "claude" });
 
     expect(existsSync(join(repo, ".codewiki", "config.json"))).toBe(false);
 
@@ -370,7 +370,7 @@ describe("scan one-off overrides", () => {
     console.error = (...args: unknown[]) => { stderr += args.join(" ") + "\n"; };
 
     try {
-      await scanCommand(repo, { concurrency: "abc" });
+      await scanCommand(repo, { nonInteractive: true, concurrency: "abc" });
     } catch {
       // expected
     }
@@ -396,7 +396,7 @@ describe("scan one-off overrides", () => {
     console.error = (...args: unknown[]) => { stderr += args.join(" ") + "\n"; };
 
     try {
-      await scanCommand(repo, { timeout: "-5" });
+      await scanCommand(repo, { nonInteractive: true, timeout: "-5" });
     } catch {
       // expected
     }
@@ -414,7 +414,7 @@ describe("scan one-off overrides", () => {
     const repo = createTempRepo("scan-zero-retries");
     addFile(repo, "v.js", "const v = 5;\n");
 
-    await scanCommand(repo, { retries: "0" });
+    await scanCommand(repo, { nonInteractive: true, retries: "0" });
 
     // Should succeed - no config written by default
     expect(existsSync(join(repo, ".codewiki", "config.json"))).toBe(false);
@@ -434,7 +434,7 @@ describe("scan one-off overrides", () => {
     console.error = (...args: unknown[]) => { stderr += args.join(" ") + "\n"; };
 
     try {
-      await scanCommand(repo, { retries: "-1" });
+      await scanCommand(repo, { nonInteractive: true, retries: "-1" });
     } catch {
       // expected
     }
@@ -469,7 +469,7 @@ describe("ask --agent override", () => {
     addFile(repo, "a.js", "const a = 1;\n");
 
     // Need a snapshot first
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const { output } = await captureOutput(() => askCommand(repo, "What is this?", { json: true, agent: "aider" }));
     const parsed = JSON.parse(output);
@@ -482,7 +482,7 @@ describe("ask --agent override", () => {
     const repo = createTempRepo("ask-default");
     addFile(repo, "b.js", "const b = 2;\n");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const { output } = await captureOutput(() => askCommand(repo, "What is this?", { json: true }));
     const parsed = JSON.parse(output);
@@ -518,7 +518,7 @@ describe("status reports effective config and sources", () => {
       JSON.stringify({ agent: { default: "claude" } })
     );
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const { output } = await captureOutput(() => statusCommand(repo, { json: true }));
     const parsed = JSON.parse(output);
@@ -536,7 +536,7 @@ describe("status reports effective config and sources", () => {
     const repo = createTempRepo("status-text");
     addFile(repo, "a.js", "const a = 1;\n");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const { output } = await captureOutput(() => statusCommand(repo, {}));
     expect(output).toContain("Default provider:");
