@@ -5,6 +5,7 @@ import { join, relative } from "node:path";
 import type { Snapshot, ScanConfig } from "./types.js";
 import { shouldSkipDir } from "./ignore.js";
 import { loadConfig } from "./config.js";
+import { SnapshotSchema } from "./schema.js";
 
 function countFiles(dir: string, root: string, config: ScanConfig, count = 0): number {
   const entries = readdirSync(dir, { withFileTypes: true });
@@ -127,6 +128,7 @@ export function isSnapshotStale(repoPath: string, snapshot: Snapshot): boolean {
 }
 
 export function writeSnapshot(repoPath: string, snapshot: Snapshot): void {
+  SnapshotSchema.parse(snapshot);
   const codewikiDir = join(repoPath, ".codewiki");
   if (!existsSync(codewikiDir)) {
     mkdirSync(codewikiDir, { recursive: true });
@@ -142,7 +144,8 @@ export function readSnapshot(repoPath: string): Snapshot | null {
   if (!existsSync(path)) return null;
   try {
     const raw = readFileSync(path, "utf-8");
-    return JSON.parse(raw) as Snapshot;
+    const parsed = SnapshotSchema.safeParse(JSON.parse(raw));
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }

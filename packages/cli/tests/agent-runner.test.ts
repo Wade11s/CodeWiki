@@ -3,11 +3,11 @@ import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  FakeProvider,
   ClaudeProvider,
   AgentRunner,
   RunStore,
 } from "@codewiki/core";
+import { FakeProvider } from "@codewiki/core/testing";
 import type { RunTaskOptions } from "@codewiki/core";
 
 function createTempDir(name: string): string {

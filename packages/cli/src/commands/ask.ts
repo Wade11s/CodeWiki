@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { readSnapshot, loadConfig } from "@codewiki/core";
+import { readSnapshot, loadConfig, CodeWikiError } from "@codewiki/core";
 
 export async function askCommand(
   repoPath: string,
@@ -9,8 +9,7 @@ export async function askCommand(
 ): Promise<void> {
   const snapshot = readSnapshot(repoPath);
   if (!snapshot) {
-    console.error(`Error: No snapshot found for ${repoPath}. Run 'codewiki scan ${repoPath}' first.`);
-    process.exit(1);
+    throw new CodeWikiError(`Error: No snapshot found for ${repoPath}. Run 'codewiki scan ${repoPath}' first.`);
   }
 
   const config = loadConfig(repoPath);

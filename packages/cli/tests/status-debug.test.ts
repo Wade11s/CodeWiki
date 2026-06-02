@@ -5,7 +5,8 @@ import { join } from "node:path";
 import { scanCommand } from "../src/commands/scan.js";
 import { statusCommand } from "../src/commands/status.js";
 import { debugCommand } from "../src/commands/debug.js";
-import { AgentRunner, FakeProvider, RunStore } from "@codewiki/core";
+import { AgentRunner, RunStore } from "@codewiki/core";
+import { FakeProvider } from "@codewiki/core/testing";
 
 function createTempRepo(name: string): string {
   const dir = mkdtempSync(join(tmpdir(), `codewiki-sd-${name}-`));
