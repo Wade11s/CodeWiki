@@ -1,7 +1,7 @@
 import { readFileSync, statSync, openSync, readSync, closeSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { execSync } from "node:child_process";
-import type { ScanConfig, SkipReason, SkippedFile } from "./types.js";
+import { execFileSync } from "node:child_process";
+import type { ScanConfig, SkipReason } from "./types.js";
 
 const DEFAULT_SKIP_DIRS = [
   "node_modules",
@@ -35,6 +35,8 @@ const GENERATED_PATTERNS = [
 
 const OVERSIZED_MAX_BYTES = 1024 * 1024; // 1 MB
 
+const gitignoreCache = new Map<string, string[]>();
+
 function parseGitignoreLine(line: string): string | null {
   const trimmed = line.trim();
   if (!trimmed || trimmed.startsWith("#")) return null;
@@ -42,12 +44,26 @@ function parseGitignoreLine(line: string): string | null {
 }
 
 function readGitignorePatterns(repoPath: string): string[] {
+  const cached = gitignoreCache.get(repoPath);
+  if (cached) return cached;
+
   const gitignorePath = join(repoPath, ".gitignore");
   try {
     const content = readFileSync(gitignorePath, "utf-8");
-    return content.split("\n").map(parseGitignoreLine).filter((p): p is string => p !== null);
+    const patterns = content.split("\n").map(parseGitignoreLine).filter((p): p is string => p !== null);
+    gitignoreCache.set(repoPath, patterns);
+    return patterns;
   } catch {
+    gitignoreCache.set(repoPath, []);
     return [];
+  }
+}
+
+export function clearGitignoreCache(repoPath?: string): void {
+  if (repoPath) {
+    gitignoreCache.delete(repoPath);
+  } else {
+    gitignoreCache.clear();
   }
 }
 
@@ -64,7 +80,8 @@ function matchPattern(pattern: string, relPath: string): boolean {
   let regexPattern = cleanPattern;
 
   // Handle root-relative patterns
-  if (regexPattern.startsWith("/")) {
+  const isRootRelative = regexPattern.startsWith("/");
+  if (isRootRelative) {
     regexPattern = regexPattern.slice(1);
   }
 
@@ -80,13 +97,20 @@ function matchPattern(pattern: string, relPath: string): boolean {
     .replace(/\*/g, "[^/\\\\]*")
     .replace(/\?/g, "[^/\\\\]");
 
-  const regex = new RegExp(`^(?:.*/)?${regexPattern}$`);
+  // Root-relative patterns match only at the root — no prefix wildcard
+  const prefix = isRootRelative ? "" : "(?:.*/)?";
+  const regex = new RegExp(`^${prefix}${regexPattern}$`);
 
   if (anyDepth) {
     return regex.test(relPath) || pathParts.some((part) => regex.test(part));
   }
 
-  // For non-any-depth patterns, match against the full path or individual parts
+  // Root-relative patterns match only against the full path from root
+  if (isRootRelative) {
+    return regex.test(relPath);
+  }
+
+  // Non-root-relative patterns match against the full path or individual parts
   return regex.test(relPath) || pathParts.some((part) => regex.test(part));
 }
 
@@ -108,7 +132,7 @@ function isIgnoredByParsedGitignore(relPath: string, patterns: string[]): boolea
 
 function isGitRepo(repoPath: string): boolean {
   try {
-    execSync("git rev-parse --git-dir", {
+    execFileSync("git", ["rev-parse", "--git-dir"], {
       cwd: repoPath,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "ignore"],
@@ -122,7 +146,7 @@ function isGitRepo(repoPath: string): boolean {
 export function isIgnoredByGit(relPath: string, repoPath: string): boolean {
   if (!isGitRepo(repoPath)) return false;
   try {
-    execSync(`git check-ignore -q "${relPath}"`, {
+    execFileSync("git", ["check-ignore", "-q", relPath], {
       cwd: repoPath,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "ignore"],
@@ -272,4 +296,5 @@ export function addCodewikiToGitignore(repoPath: string): void {
   }
   content += ".codewiki\n";
   writeFileSync(gitignorePath, content);
+  clearGitignoreCache(repoPath);
 }

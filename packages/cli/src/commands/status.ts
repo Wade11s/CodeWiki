@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { readSnapshot, loadConfig } from "@codewiki/core";
+import { SkippedFilesArtifactSchema, SkipReasonSchema } from "@codewiki/core";
 import type { SkippedFilesArtifact, SkipReason } from "@codewiki/core";
 
 function readSkippedFiles(repoPath: string): SkippedFilesArtifact | null {
@@ -8,20 +9,18 @@ function readSkippedFiles(repoPath: string): SkippedFilesArtifact | null {
   if (!existsSync(path)) return null;
   try {
     const raw = readFileSync(path, "utf-8");
-    return JSON.parse(raw) as SkippedFilesArtifact;
+    const parsed = JSON.parse(raw);
+    const result = SkippedFilesArtifactSchema.safeParse(parsed);
+    return result.success ? result.data : null;
   } catch {
     return null;
   }
 }
 
 function countSkippedByReason(skipped: SkippedFilesArtifact | null): Record<SkipReason, number> {
-  const counts: Record<SkipReason, number> = {
-    binary: 0,
-    oversized: 0,
-    generated: 0,
-    ignored: 0,
-    "parse-unavailable": 0,
-  };
+  const counts = Object.fromEntries(
+    SkipReasonSchema.options.map((r) => [r, 0])
+  ) as Record<SkipReason, number>;
   if (!skipped) return counts;
   for (const file of skipped.data) {
     if (counts[file.reason] !== undefined) {

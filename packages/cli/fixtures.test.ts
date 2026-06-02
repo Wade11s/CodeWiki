@@ -6,6 +6,7 @@ import { scanCommand } from "./src/commands/scan.js";
 import { statusCommand } from "./src/commands/status.js";
 import { debugCommand } from "./src/commands/debug.js";
 import { askCommand } from "./src/commands/ask.js";
+import { clearGitignoreCache } from "@codewiki/core";
 
 function createTempRepo(name: string): string {
   const dir = mkdtempSync(join(tmpdir(), `codewiki-fixture-${name}-`));
@@ -16,6 +17,7 @@ function cleanup(dir: string): void {
   if (existsSync(dir)) {
     rmSync(dir, { recursive: true, force: true });
   }
+  clearGitignoreCache();
 }
 
 function addFile(dir: string, relPath: string, content: string): void {
@@ -387,6 +389,36 @@ describe("Ignore rules fixtures", () => {
 
     cleanup(repo);
   });
+
+  it("respects custom gitignore patterns", async () => {
+    const repo = createTempRepo("gitignore-patterns");
+    addFile(repo, "src/index.js", "export const x = 1;\n");
+    addFile(repo, "debug.log", "debug info\n");
+    addFile(repo, "output/bundle.js", "built\n");
+    addFile(repo, "foo/output/keep.js", "keep me\n");
+    // /output/ is root-relative: ignores only output/ at repo root
+    // *.log is non-root-relative: ignores .log files at any depth
+    addFile(repo, ".gitignore", "*.log\n/output/\n");
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    const filesPath = join(repo, ".codewiki", "index", "files.json");
+    const files = JSON.parse(readFileSync(filesPath, "utf-8"));
+    const filePaths = files.data as string[];
+    expect(filePaths).toContain("src/index.js");
+    expect(filePaths).toContain("foo/output/keep.js");
+    expect(filePaths).not.toContain("debug.log");
+    expect(filePaths).not.toContain("output/bundle.js");
+
+    const skippedPath = join(repo, ".codewiki", "index", "skipped-files.json");
+    const skipped = JSON.parse(readFileSync(skippedPath, "utf-8"));
+    const ignored = skipped.data.filter((f: { reason: string; metadata?: { source?: string } }) => f.reason === "ignored" && f.metadata?.source === "gitignore");
+    const skippedPaths = ignored.map((f: { path: string }) => f.path);
+    expect(skippedPaths.some((p: string) => p.includes("debug.log"))).toBe(true);
+    expect(skippedPaths.some((p: string) => p.includes("output"))).toBe(true);
+
+    cleanup(repo);
+  });
 });
 
 describe("Gitignore handling fixtures", () => {
@@ -420,6 +452,18 @@ describe("Gitignore handling fixtures", () => {
     expect(existsSync(gitignorePath)).toBe(true);
     const content = readFileSync(gitignorePath, "utf-8");
     expect(content).toContain(".codewiki");
+
+    cleanup(repo);
+  });
+
+  it("interactive scan does not modify .gitignore when user declines", async () => {
+    const repo = createTempRepo("interactive-decline");
+    addFile(repo, "a.js", "// a\n");
+
+    await scanCommand(repo, { _testConfirmFn: async () => false });
+
+    // .gitignore should not be created since user declined
+    expect(existsSync(join(repo, ".gitignore"))).toBe(false);
 
     cleanup(repo);
   });
