@@ -284,21 +284,23 @@ function parseTypeScriptJavaScript(ctx: FileContext): { symbols: ParsedSymbol[];
   // ── Symbols ──
 
   // export const/let/var/function/class/interface/type/enum name
-  const exportedDeclRegex = /export\s+(?:default\s+)?(?:async\s+)?(?:const|let|var|function|class|interface|type|enum)\s+(\w+)/g;
+  const exportedDeclRegex = /export\s+(?:default\s+)?(?:async\s+)?(const|let|var|function|class|interface|type|enum)\s+(\w+)/g;
   for (const match of content.matchAll(exportedDeclRegex)) {
     const lineStart = getLineStart(content, match.index ?? 0);
     const lineEnd = findBlockEnd(lines, lineStart);
-    const name = match[1];
-    const raw = content.substring(match.index ?? 0, match.index ?? 0 + 40).toLowerCase();
-    let kind: SymbolKind = "unknown";
-    if (raw.includes("function")) kind = "function";
-    else if (raw.includes("class")) kind = "class";
-    else if (raw.includes("interface")) kind = "interface";
-    else if (raw.includes("type")) kind = "type";
-    else if (raw.includes("enum")) kind = "enum";
-    else if (raw.includes("const")) kind = "const";
-    else if (raw.includes("let")) kind = "let";
-    else if (raw.includes("var")) kind = "variable";
+    const keyword = match[1];
+    const name = match[2];
+    const kindMap: Record<string, SymbolKind> = {
+      function: "function",
+      class: "class",
+      interface: "interface",
+      type: "type",
+      enum: "enum",
+      const: "const",
+      let: "let",
+      var: "variable",
+    };
+    const kind = kindMap[keyword] ?? "unknown";
 
     symbols.push({
       name,
