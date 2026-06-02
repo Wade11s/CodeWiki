@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { createSnapshot, writeSnapshot, loadConfig, writeRepoConfig } from "@codewiki/core";
+import { generateSite } from "../site-generator.js";
 
 function shouldSkip(relPath: string): boolean {
   const skip = [
@@ -147,6 +148,16 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
         retries,
       },
     });
+  }
+
+  const siteResult = generateSite(repoPath);
+  if (siteResult.success) {
+    console.log(`Site: ${siteResult.siteDir}`);
+  } else {
+    console.error(`Site generation failed:`);
+    for (const err of siteResult.errors) {
+      console.error(`  - ${err}`);
+    }
   }
 
   console.log(`Scanned ${files.length} files`);

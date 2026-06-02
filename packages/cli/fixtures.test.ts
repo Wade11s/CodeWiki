@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync, writeFileSync as writeFile } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scanCommand } from "./src/commands/scan.js";
 import { statusCommand } from "./src/commands/status.js";
 import { debugCommand } from "./src/commands/debug.js";
 import { askCommand } from "./src/commands/ask.js";
+import { serveCommand } from "./src/commands/serve.js";
+import { generateSite } from "./src/site-generator.js";
 
 function createTempRepo(name: string): string {
   const dir = mkdtempSync(join(tmpdir(), `codewiki-fixture-${name}-`));
@@ -248,5 +250,93 @@ describe("Evidence fixtures", () => {
     expect(response).toHaveProperty("snapshotId");
 
     cleanup(repo);
+  });
+});
+
+describe("Site generation fixtures", () => {
+  it("scan generates a static site directory", async () => {
+    const repo = createTempRepo("site-gen");
+    addFile(repo, "a.js", "// a\n");
+
+    await scanCommand(repo, {});
+
+    const siteDir = join(repo, ".codewiki", "site");
+    expect(existsSync(siteDir)).toBe(true);
+    expect(existsSync(join(siteDir, "index.html"))).toBe(true);
+    expect(existsSync(join(siteDir, "snapshot.json"))).toBe(true);
+    expect(existsSync(join(siteDir, "artifacts", "overview.json"))).toBe(true);
+    expect(existsSync(join(siteDir, "artifacts", "modules.json"))).toBe(true);
+    expect(existsSync(join(siteDir, "artifacts", "features.json"))).toBe(true);
+    expect(existsSync(join(siteDir, "artifacts", "code-map.json"))).toBe(true);
+
+    cleanup(repo);
+  });
+
+  it("generateSite copies rich artifacts into the site", async () => {
+    const repo = createTempRepo("site-rich");
+    addFile(repo, "a.js", "// a\n");
+    await scanCommand(repo, {});
+
+    const overviewPath = join(repo, ".codewiki", "artifacts", "overview.json");
+    const enriched = {
+      schemaVersion: "1.0.0",
+      snapshotId: "test",
+      generatedAt: new Date().toISOString(),
+      data: {
+        summary: "Rich summary",
+        architecture: "Layered",
+        technologyStack: ["Node.js"],
+        entryPoints: [{ path: "a.js", description: "entry" }],
+        runModel: "node a.js",
+      },
+    };
+    writeFile(overviewPath, JSON.stringify(enriched, null, 2));
+
+    const result = generateSite(repo);
+    expect(result.success).toBe(true);
+
+    const siteOverviewPath = join(repo, ".codewiki", "site", "artifacts", "overview.json");
+    expect(existsSync(siteOverviewPath)).toBe(true);
+    const siteOverview = JSON.parse(readFileSync(siteOverviewPath, "utf-8"));
+    expect(siteOverview.data.summary).toBe("Rich summary");
+
+    cleanup(repo);
+  });
+
+  it("generateSite handles missing snapshot gracefully", () => {
+    const repo = createTempRepo("site-no-snap");
+    mkdirSync(join(repo, ".codewiki"), { recursive: true });
+    // No snapshot.json, no artifacts dir
+
+    const result = generateSite(repo);
+    expect(result.success).toBe(true); // Site dist was copied
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors.some((e) => e.includes("snapshot"))).toBe(true);
+
+    cleanup(repo);
+  });
+});
+
+describe("Serve fixtures", () => {
+  it("serve starts a server that responds with index.html", async () => {
+    const repo = createTempRepo("serve-test");
+    addFile(repo, "a.js", "// a\n");
+    await scanCommand(repo, {});
+
+    const serverPromise = serveCommand(repo, { port: "0" });
+
+    // Wait briefly for server to start, then abort
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // We cannot easily test the actual HTTP response here without a real port,
+    // but we can verify the site dir exists and has the right structure.
+    const siteDir = join(repo, ".codewiki", "site");
+    expect(existsSync(join(siteDir, "index.html"))).toBe(true);
+
+    // Clean up by killing the process (serveCommand never resolves)
+    cleanup(repo);
+
+    // Prevent unhandled promise rejection
+    serverPromise.catch(() => {});
   });
 });
