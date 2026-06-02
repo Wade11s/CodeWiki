@@ -64,21 +64,20 @@ export class FakeProvider implements AgentProvider {
       }
     }
 
-    const isValidate = this.behavior === "validate";
-    const responseData = isValidate
-      ? {
-          type: "module-summary",
-          summary: `Analysis for: ${options.prompt.slice(0, 50)}...`,
-          evidence: [
-            {
-              filePath: "src/example.ts",
-              lineStart: 1,
-              lineEnd: 5,
-              snippet: "export const x = 1;",
-            },
-          ],
-        }
-      : { summary: `Fake response for: ${options.prompt.slice(0, 50)}...` };
+    const responseData = {
+      type: "module-summary",
+      summary: `Analysis for: ${options.prompt.slice(0, 50)}...`,
+      keyFeatures: ["feature-a"],
+      complexity: "medium" as const,
+      evidence: [
+        {
+          filePath: "src/example.ts",
+          lineStart: 1,
+          lineEnd: 5,
+          snippet: "export const x = 1;",
+        },
+      ],
+    };
 
     return {
       taskId: `fake-${Date.now()}`,

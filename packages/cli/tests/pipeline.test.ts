@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { scanCommand } from "../src/commands/scan.js";
 import { statusCommand } from "../src/commands/status.js";
 import { debugCommand } from "../src/commands/debug.js";
-import { AgentRunner, FakeProvider, type AgentProvider, type TaskResult } from "@codewiki/core";
+import { AgentRunner, FakeProvider, partitionModules, type AgentProvider, type TaskResult } from "@codewiki/core";
 
 function createTempRepo(name: string): string {
   const dir = mkdtempSync(join(tmpdir(), `codewiki-pipeline-${name}-`));
@@ -108,6 +108,72 @@ class SelectiveFakeProvider implements AgentProvider {
     };
   }
 }
+
+describe("partitionModules", () => {
+  it("walks up directory tree to find nearest package.json", () => {
+    const files = [
+      "package.json",
+      "src/index.ts",
+      "src/utils/helper.ts",
+      "packages/core/package.json",
+      "packages/core/src/index.ts",
+      "packages/core/src/lib.ts",
+      "packages/core/tests/test.ts",
+      "packages/ui/package.json",
+      "packages/ui/src/component.tsx",
+      "docs/README.md",
+      "scripts/build.js",
+    ];
+
+    const modules = partitionModules(files);
+
+    // Find module by name helper
+    const findMod = (name: string) => modules.find((m) => m.name === name);
+
+    // Root package should include root-level files and files from non-package dirs
+    const rootPkg = findMod("root-package");
+    expect(rootPkg).toBeTruthy();
+    expect(rootPkg!.files).toContain("package.json");
+    expect(rootPkg!.files).toContain("src/index.ts");
+    expect(rootPkg!.files).toContain("src/utils/helper.ts");
+    expect(rootPkg!.files).toContain("docs/README.md");
+    expect(rootPkg!.files).toContain("scripts/build.js");
+    expect(rootPkg!.files).not.toContain("packages/core/src/index.ts");
+
+    // packages/core should include its own files and descendants
+    const corePkg = findMod("packages/core");
+    expect(corePkg).toBeTruthy();
+    expect(corePkg!.files).toContain("packages/core/package.json");
+    expect(corePkg!.files).toContain("packages/core/src/index.ts");
+    expect(corePkg!.files).toContain("packages/core/src/lib.ts");
+    expect(corePkg!.files).toContain("packages/core/tests/test.ts");
+    expect(corePkg!.files).not.toContain("packages/ui/src/component.tsx");
+
+    // packages/ui should be separate
+    const uiPkg = findMod("packages/ui");
+    expect(uiPkg).toBeTruthy();
+    expect(uiPkg!.files).toContain("packages/ui/package.json");
+    expect(uiPkg!.files).toContain("packages/ui/src/component.tsx");
+
+    // Every file should be assigned to exactly one module
+    const allGrouped = new Set(modules.flatMap((m) => m.files));
+    expect(allGrouped.size).toBe(files.length);
+    for (const f of files) {
+      expect(allGrouped.has(f)).toBe(true);
+    }
+  });
+
+  it("falls back to directory grouping when no package.json exists", () => {
+    const files = ["src/a.ts", "src/b.ts", "lib/c.ts", "README.md"];
+    const modules = partitionModules(files);
+
+    expect(modules.length).toBeGreaterThanOrEqual(2);
+    const srcMod = modules.find((m) => m.name === "src");
+    expect(srcMod).toBeTruthy();
+    expect(srcMod!.files).toContain("src/a.ts");
+    expect(srcMod!.files).toContain("src/b.ts");
+  });
+});
 
 describe("Pipeline acceptance criteria", () => {
   it("full success: all modules complete with valid artifacts", async () => {
