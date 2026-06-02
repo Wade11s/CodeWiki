@@ -2,38 +2,23 @@ import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readdirSync, statSync, writeFileSync, mkdirSync, readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { join, relative } from "node:path";
-import type { Snapshot } from "./types.js";
+import type { Snapshot, ScanConfig } from "./types.js";
+import { shouldSkipDir } from "./ignore.js";
+import { loadConfig } from "./config.js";
 
-function countFiles(dir: string, root: string, count = 0): number {
+function countFiles(dir: string, root: string, config: ScanConfig, count = 0): number {
   const entries = readdirSync(dir, { withFileTypes: true });
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
     const relPath = relative(root, fullPath);
-    if (shouldSkip(relPath)) continue;
+    if (shouldSkipDir(relPath, root, config).skip) continue;
     if (entry.isDirectory()) {
-      count = countFiles(fullPath, root, count);
+      count = countFiles(fullPath, root, config, count);
     } else {
       count++;
     }
   }
   return count;
-}
-
-function shouldSkip(relPath: string): boolean {
-  const skip = [
-    "node_modules",
-    ".git",
-    ".codewiki",
-    "dist",
-    "build",
-    "coverage",
-    ".next",
-    ".turbo",
-    ".venv",
-    "__pycache__",
-  ];
-  const parts = relPath.split(/[/\\]/);
-  return skip.some((s) => parts.includes(s));
 }
 
 export function createSnapshot(repoPath: string): Snapshot {
@@ -56,7 +41,8 @@ export function createSnapshot(repoPath: string): Snapshot {
     // not a git repo or git not available
   }
 
-  const fileCount = existsSync(repoPath) ? countFiles(repoPath, repoPath) : 0;
+  const config = loadConfig(repoPath);
+  const fileCount = existsSync(repoPath) ? countFiles(repoPath, repoPath, config.scan) : 0;
 
   const snapshot: Snapshot = {
     id: randomUUID(),

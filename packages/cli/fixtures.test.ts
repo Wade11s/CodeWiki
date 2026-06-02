@@ -31,7 +31,7 @@ describe("Repository fixtures", () => {
     addFile(repo, "index.js", "export const x = 1;\n");
     addFile(repo, "README.md", "# Minimal\n");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     expect(existsSync(join(repo, ".codewiki", "snapshot.json"))).toBe(true);
     expect(existsSync(join(repo, ".codewiki", "index", "files.json"))).toBe(true);
@@ -46,7 +46,7 @@ describe("Repository fixtures", () => {
     addFile(repo, "src/app.js", "module.exports = {};\n");
     addFile(repo, "test.js", "console.log('test');\n");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const snapshotPath = join(repo, ".codewiki", "snapshot.json");
     expect(existsSync(snapshotPath)).toBe(true);
@@ -62,7 +62,7 @@ describe("Repository fixtures", () => {
     addFile(repo, "src/main.jsx", "import React from 'react';\n");
     addFile(repo, "src/App.jsx", "export default function App() { return null; }\n");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const filesPath = join(repo, ".codewiki", "index", "files.json");
     const files = JSON.parse(readFileSync(filesPath, "utf-8"));
@@ -78,7 +78,7 @@ describe("Snapshot fixtures", () => {
     const repo = createTempRepo("snapshot");
     addFile(repo, "a.js", "const a = 1;\n");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     const snapshotPath = join(repo, ".codewiki", "snapshot.json");
     const snapshot = JSON.parse(readFileSync(snapshotPath, "utf-8"));
@@ -98,10 +98,10 @@ describe("Snapshot fixtures", () => {
     const repo = createTempRepo("version");
     addFile(repo, "x.js", "// x\n");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
     const snap1 = JSON.parse(readFileSync(join(repo, ".codewiki", "snapshot.json"), "utf-8"));
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
     const snap2 = JSON.parse(readFileSync(join(repo, ".codewiki", "snapshot.json"), "utf-8"));
 
     expect(snap1.schemaVersion).toBe(snap2.schemaVersion);
@@ -115,7 +115,7 @@ describe("CodeWiki Directory fixtures", () => {
     const repo = createTempRepo("layout");
     addFile(repo, "file.js", "// file\n");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     expect(existsSync(join(repo, ".codewiki", "config.json"))).toBe(false);
     expect(existsSync(join(repo, ".codewiki", "snapshot.json"))).toBe(true);
@@ -146,7 +146,7 @@ describe("CodeWiki Directory fixtures", () => {
 
     expect(output).toContain("CodeWiki directory: no");
 
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     output = "";
     console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
@@ -162,7 +162,7 @@ describe("CodeWiki Directory fixtures", () => {
   it("debug outputs JSON with --json", async () => {
     const repo = createTempRepo("debug");
     addFile(repo, "a.js", "// a\n");
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     let output = "";
     const originalLog = console.log;
@@ -214,7 +214,7 @@ describe("Evidence fixtures", () => {
   it("ask returns placeholder when snapshot exists", async () => {
     const repo = createTempRepo("ask-snap");
     addFile(repo, "a.js", "// a\n");
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     let output = "";
     const originalLog = console.log;
@@ -232,7 +232,7 @@ describe("Evidence fixtures", () => {
   it("ask returns JSON with --json", async () => {
     const repo = createTempRepo("ask-json");
     addFile(repo, "a.js", "// a\n");
-    await scanCommand(repo, {});
+    await scanCommand(repo, { nonInteractive: true });
 
     let output = "";
     const originalLog = console.log;
@@ -246,6 +246,250 @@ describe("Evidence fixtures", () => {
     expect(response).toHaveProperty("evidence");
     expect(response).toHaveProperty("confidence");
     expect(response).toHaveProperty("snapshotId");
+
+    cleanup(repo);
+  });
+});
+
+describe("Ignore rules fixtures", () => {
+  it("skips ignored directories like node_modules", async () => {
+    const repo = createTempRepo("ignored-dirs");
+    addFile(repo, "src/index.js", "export const x = 1;\n");
+    addFile(repo, "node_modules/pkg/index.js", "module.exports = {};\n");
+    addFile(repo, ".git/config", "[core]\n");
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    const skippedPath = join(repo, ".codewiki", "index", "skipped-files.json");
+    const skipped = JSON.parse(readFileSync(skippedPath, "utf-8"));
+    expect(Array.isArray(skipped.data)).toBe(true);
+
+    const ignored = skipped.data.filter((f: { reason: string }) => f.reason === "ignored");
+    const paths = ignored.map((f: { path: string }) => f.path);
+    expect(paths.some((p: string) => p.includes("node_modules"))).toBe(true);
+    expect(paths.some((p: string) => p.includes(".git"))).toBe(true);
+
+    cleanup(repo);
+  });
+
+  it("skips generated files", async () => {
+    const repo = createTempRepo("generated");
+    addFile(repo, "src/app.js", "console.log('hello');\n");
+    addFile(repo, "app.min.js", "console.log('min');\n");
+    addFile(repo, "types.d.ts", "export type T = string;\n");
+    addFile(repo, "app.js.map", "{}\n");
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    const skippedPath = join(repo, ".codewiki", "index", "skipped-files.json");
+    const skipped = JSON.parse(readFileSync(skippedPath, "utf-8"));
+
+    const generated = skipped.data.filter((f: { reason: string }) => f.reason === "generated");
+    const paths = generated.map((f: { path: string }) => f.path);
+    expect(paths).toContain("app.min.js");
+    expect(paths).toContain("types.d.ts");
+    expect(paths).toContain("app.js.map");
+
+    cleanup(repo);
+  });
+
+  it("skips binary files", async () => {
+    const repo = createTempRepo("binary");
+    addFile(repo, "src/index.js", "export const x = 1;\n");
+
+    const binaryPath = join(repo, "image.png");
+    const buf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
+    writeFileSync(binaryPath, buf);
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    const skippedPath = join(repo, ".codewiki", "index", "skipped-files.json");
+    const skipped = JSON.parse(readFileSync(skippedPath, "utf-8"));
+
+    const binary = skipped.data.filter((f: { reason: string }) => f.reason === "binary");
+    const paths = binary.map((f: { path: string }) => f.path);
+    expect(paths).toContain("image.png");
+
+    cleanup(repo);
+  });
+
+  it("skips oversized files", async () => {
+    const repo = createTempRepo("oversized");
+    addFile(repo, "src/index.js", "export const x = 1;\n");
+
+    const bigPath = join(repo, "big.log");
+    const bigContent = "x".repeat(1024 * 1024 + 100); // > 1 MB
+    writeFileSync(bigPath, bigContent);
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    const skippedPath = join(repo, ".codewiki", "index", "skipped-files.json");
+    const skipped = JSON.parse(readFileSync(skippedPath, "utf-8"));
+
+    const oversized = skipped.data.filter((f: { reason: string }) => f.reason === "oversized");
+    const paths = oversized.map((f: { path: string }) => f.path);
+    expect(paths).toContain("big.log");
+
+    cleanup(repo);
+  });
+
+  it("respects configured exclude rules", async () => {
+    const repo = createTempRepo("config-exclude");
+    addFile(repo, "src/index.js", "export const x = 1;\n");
+    addFile(repo, "docs/readme.md", "# docs\n");
+    addFile(repo, "tests/test.js", "test\n");
+
+    const configPath = join(repo, ".codewiki", "config.json");
+    mkdirSync(join(repo, ".codewiki"), { recursive: true });
+    writeFileSync(configPath, JSON.stringify({
+      scan: { interactiveConfig: false, exclude: ["docs/**", "tests/**"] },
+    }));
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    const filesPath = join(repo, ".codewiki", "index", "files.json");
+    const files = JSON.parse(readFileSync(filesPath, "utf-8"));
+    const paths = files.data as string[];
+    expect(paths).toContain("src/index.js");
+    expect(paths).not.toContain("docs/readme.md");
+    expect(paths).not.toContain("tests/test.js");
+
+    const skippedPath = join(repo, ".codewiki", "index", "skipped-files.json");
+    const skipped = JSON.parse(readFileSync(skippedPath, "utf-8"));
+    const ignored = skipped.data.filter((f: { reason: string; metadata?: { source?: string } }) => f.reason === "ignored" && f.metadata?.source === "config");
+    const skippedPaths = ignored.map((f: { path: string }) => f.path);
+    expect(skippedPaths.some((p: string) => p.includes("docs"))).toBe(true);
+    expect(skippedPaths.some((p: string) => p.includes("tests"))).toBe(true);
+
+    cleanup(repo);
+  });
+
+  it("respects configured include rules", async () => {
+    const repo = createTempRepo("config-include");
+    addFile(repo, "src/index.js", "export const x = 1;\n");
+    addFile(repo, "src/utils.js", "export const y = 2;\n");
+    addFile(repo, "README.md", "# readme\n");
+
+    const configPath = join(repo, ".codewiki", "config.json");
+    mkdirSync(join(repo, ".codewiki"), { recursive: true });
+    writeFileSync(configPath, JSON.stringify({
+      scan: { interactiveConfig: false, include: ["src/**"] },
+    }));
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    const filesPath = join(repo, ".codewiki", "index", "files.json");
+    const files = JSON.parse(readFileSync(filesPath, "utf-8"));
+    const paths = files.data as string[];
+    expect(paths).toContain("src/index.js");
+    expect(paths).toContain("src/utils.js");
+    expect(paths).not.toContain("README.md");
+
+    cleanup(repo);
+  });
+});
+
+describe("Gitignore handling fixtures", () => {
+  it("non-interactive scan warns when .codewiki is not ignored", async () => {
+    const repo = createTempRepo("noninteractive-warn");
+    addFile(repo, "a.js", "// a\n");
+
+    let warnings = "";
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => { warnings += args.join(" ") + "\n"; };
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    console.warn = originalWarn;
+
+    expect(warnings).toContain(".codewiki is not in .gitignore");
+
+    // .gitignore should not be created
+    expect(existsSync(join(repo, ".gitignore"))).toBe(false);
+
+    cleanup(repo);
+  });
+
+  it("interactive scan adds .codewiki to .gitignore when confirmed", async () => {
+    const repo = createTempRepo("interactive-add");
+    addFile(repo, "a.js", "// a\n");
+
+    await scanCommand(repo, { _testConfirmFn: async () => true });
+
+    const gitignorePath = join(repo, ".gitignore");
+    expect(existsSync(gitignorePath)).toBe(true);
+    const content = readFileSync(gitignorePath, "utf-8");
+    expect(content).toContain(".codewiki");
+
+    cleanup(repo);
+  });
+
+  it("does not warn or prompt when .codewiki is already in .gitignore", async () => {
+    const repo = createTempRepo("already-ignored");
+    addFile(repo, "a.js", "// a\n");
+    writeFileSync(join(repo, ".gitignore"), ".codewiki\n");
+
+    let warnings = "";
+    const originalWarn = console.warn;
+    console.warn = (...args: unknown[]) => { warnings += args.join(" ") + "\n"; };
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    console.warn = originalWarn;
+
+    expect(warnings).not.toContain(".codewiki is not in .gitignore");
+
+    cleanup(repo);
+  });
+});
+
+describe("Status skipped files fixtures", () => {
+  it("status reports skipped-file counts by reason", async () => {
+    const repo = createTempRepo("status-skipped");
+    addFile(repo, "src/index.js", "export const x = 1;\n");
+    addFile(repo, "node_modules/pkg/index.js", "module.exports = {};\n");
+
+    const binaryPath = join(repo, "image.png");
+    writeFileSync(binaryPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]));
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    let output = "";
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+
+    await statusCommand(repo, {});
+    console.log = originalLog;
+
+    expect(output).toContain("Skipped files:");
+    expect(output).toContain("ignored:");
+    expect(output).toContain("binary:");
+
+    cleanup(repo);
+  });
+
+  it("status JSON includes skippedByReason", async () => {
+    const repo = createTempRepo("status-skipped-json");
+    addFile(repo, "src/index.js", "export const x = 1;\n");
+    addFile(repo, "node_modules/pkg/index.js", "module.exports = {};\n");
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    let output = "";
+    const originalLog = console.log;
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+
+    await statusCommand(repo, { json: true });
+    console.log = originalLog;
+
+    const status = JSON.parse(output);
+    expect(status).toHaveProperty("skippedFiles");
+    expect(status).toHaveProperty("skippedByReason");
+    expect(status.skippedByReason).toHaveProperty("ignored");
+    expect(status.skippedByReason).toHaveProperty("binary");
+    expect(status.skippedByReason).toHaveProperty("oversized");
+    expect(status.skippedByReason).toHaveProperty("generated");
+    expect(status.skippedByReason).toHaveProperty("parse-unavailable");
 
     cleanup(repo);
   });

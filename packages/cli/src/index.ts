@@ -21,7 +21,8 @@ program
   .option("-t, --timeout <seconds>", "Timeout per task in seconds")
   .option("-r, --retries <n>", "Number of retries per task")
   .option("--write-config", "Write scan options to repo config")
-  .action(async (repo: string, options: { concurrency?: string; timeout?: string; retries?: string; writeConfig?: boolean }) => {
+  .option("--non-interactive", "Do not prompt for interactive actions")
+  .action(async (repo: string, options: { concurrency?: string; timeout?: string; retries?: string; writeConfig?: boolean; nonInteractive?: boolean }) => {
     await scanCommand(repo, options);
   });
 

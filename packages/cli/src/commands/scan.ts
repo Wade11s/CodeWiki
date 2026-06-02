@@ -1,41 +1,55 @@
 import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { createSnapshot, writeSnapshot, loadConfig, writeRepoConfig } from "@codewiki/core";
+import { shouldSkipFile, shouldSkipDir, isCodewikiIgnored, addCodewikiToGitignore } from "@codewiki/core";
+import type { SkippedFile, ScanConfig } from "@codewiki/core";
 
-function shouldSkip(relPath: string): boolean {
-  const skip = [
-    "node_modules",
-    ".git",
-    ".codewiki",
-    "dist",
-    "build",
-    "coverage",
-    ".next",
-    ".turbo",
-    ".venv",
-    "__pycache__",
-  ];
-  const parts = relPath.split(/[/\\]/);
-  return skip.some((s) => parts.includes(s));
+interface ScanOptions {
+  concurrency?: string;
+  timeout?: string;
+  retries?: string;
+  writeConfig?: boolean;
+  nonInteractive?: boolean;
+  _testConfirmFn?: () => Promise<boolean>;
 }
 
-function listFiles(dir: string, root: string): string[] {
-  const result: string[] = [];
+interface ScanResult {
+  files: string[];
+  skipped: SkippedFile[];
+}
+
+function scanDir(dir: string, root: string, scanConfig: ScanConfig): ScanResult {
+  const files: string[] = [];
+  const skipped: SkippedFile[] = [];
   const entries = readdirSync(dir, { withFileTypes: true });
+
   for (const entry of entries) {
     const fullPath = join(dir, entry.name);
     const relPath = relative(root, fullPath);
-    if (shouldSkip(relPath)) continue;
+
     if (entry.isDirectory()) {
-      result.push(...listFiles(fullPath, root));
+      const dirResult = shouldSkipDir(relPath, root, scanConfig);
+      if (dirResult.skip) {
+        skipped.push({ path: relPath, reason: dirResult.reason!, metadata: dirResult.metadata });
+        continue;
+      }
+      const sub = scanDir(fullPath, root, scanConfig);
+      files.push(...sub.files);
+      skipped.push(...sub.skipped);
     } else {
-      result.push(relPath);
+      const fileResult = shouldSkipFile(relPath, fullPath, root, scanConfig);
+      if (fileResult.skip) {
+        skipped.push({ path: relPath, reason: fileResult.reason!, metadata: fileResult.metadata });
+        continue;
+      }
+      files.push(relPath);
     }
   }
-  return result;
+
+  return { files, skipped };
 }
 
-function writeIndexArtifacts(codewikiDir: string, snapshotId: string, files: string[]): void {
+function writeIndexArtifacts(codewikiDir: string, snapshotId: string, files: string[], skipped: SkippedFile[]): void {
   const indexDir = join(codewikiDir, "index");
   mkdirSync(indexDir, { recursive: true });
 
@@ -73,7 +87,7 @@ function writeIndexArtifacts(codewikiDir: string, snapshotId: string, files: str
 
   writeFileSync(
     join(indexDir, "skipped-files.json"),
-    JSON.stringify(envelope([]), null, 2)
+    JSON.stringify(envelope(skipped), null, 2)
   );
 }
 
@@ -109,11 +123,31 @@ function writeArtifactFiles(codewikiDir: string, snapshotId: string): void {
   );
 }
 
-interface ScanOptions {
-  concurrency?: string;
-  timeout?: string;
-  retries?: string;
-  writeConfig?: boolean;
+async function promptAddToGitignore(
+  repoPath: string,
+  interactive: boolean,
+  confirmFn?: () => Promise<boolean>
+): Promise<void> {
+  if (!interactive) {
+    console.warn("Warning: .codewiki is not in .gitignore. It is recommended to add it to prevent CodeWiki output from being tracked.");
+    return;
+  }
+
+  try {
+    let answer: boolean;
+    if (confirmFn) {
+      answer = await confirmFn();
+    } else {
+      const { confirm } = await import("@inquirer/prompts");
+      answer = await confirm({ message: ".codewiki is not in .gitignore. Add it now?", default: true });
+    }
+    if (answer) {
+      addCodewikiToGitignore(repoPath);
+      console.log("Added .codewiki to .gitignore");
+    }
+  } catch {
+    console.warn("Warning: .codewiki is not in .gitignore. It is recommended to add it to prevent CodeWiki output from being tracked.");
+  }
 }
 
 export async function scanCommand(repoPath: string, options: ScanOptions): Promise<void> {
@@ -134,8 +168,8 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
   const snapshot = createSnapshot(repoPath);
   writeSnapshot(repoPath, snapshot);
 
-  const files = listFiles(repoPath, repoPath);
-  writeIndexArtifacts(codewikiDir, snapshot.id, files);
+  const { files, skipped } = scanDir(repoPath, repoPath, config.scan);
+  writeIndexArtifacts(codewikiDir, snapshot.id, files, skipped);
   writeArtifactFiles(codewikiDir, snapshot.id);
 
   if (options.writeConfig) {
@@ -147,6 +181,12 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
         retries,
       },
     });
+  }
+
+  // Check if .codewiki is ignored
+  if (!isCodewikiIgnored(repoPath)) {
+    const isInteractive = !options.nonInteractive && config.scan.interactiveConfig;
+    await promptAddToGitignore(repoPath, isInteractive, options._testConfirmFn);
   }
 
   console.log(`Scanned ${files.length} files`);
