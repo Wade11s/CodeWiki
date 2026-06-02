@@ -96,6 +96,22 @@ export interface EffectiveScanConfig {
   source: ConfigSource;
 }
 
+export interface FeatureCandidate {
+  id: string;
+  category: "script" | "cli" | "route" | "api" | "ui-page" | "test" | "export" | "readme-usage";
+  name: string;
+  description?: string;
+  evidence: Evidence[];
+}
+
+export interface FeatureCandidateGroup {
+  id: string;
+  category: FeatureCandidate["category"];
+  name: string;
+  description?: string;
+  candidates: FeatureCandidate[];
+}
+
 export interface TaskResult {
   taskId: string;
   exitCode: number;
