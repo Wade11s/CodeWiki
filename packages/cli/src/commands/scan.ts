@@ -113,6 +113,7 @@ interface ScanOptions {
   concurrency?: string;
   timeout?: string;
   retries?: string;
+  agent?: string;
   writeConfig?: boolean;
 }
 
@@ -127,6 +128,7 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
   const concurrency = options.concurrency ? parseInt(options.concurrency, 10) : config.agent.concurrency;
   const timeoutSeconds = options.timeout ? parseInt(options.timeout, 10) : config.agent.timeoutSeconds;
   const retries = options.retries ? parseInt(options.retries, 10) : config.agent.retries;
+  const agent = options.agent || config.agent.default;
 
   const codewikiDir = join(repoPath, ".codewiki");
   mkdirSync(codewikiDir, { recursive: true });
@@ -145,6 +147,7 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
         concurrency,
         timeoutSeconds,
         retries,
+        default: agent,
       },
     });
   }

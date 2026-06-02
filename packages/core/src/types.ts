@@ -47,11 +47,35 @@ export interface CodeWikiConfig {
   scan: ScanConfig;
 }
 
+export type HealthStatus = "healthy" | "degraded" | "unavailable";
+
 export interface DetectedAgent {
   name: string;
   command: string;
   version: string | null;
   available: boolean;
+  health: HealthStatus;
+  default: boolean;
+}
+
+export type ConfigSource = "default" | "user" | "repo";
+
+export interface EffectiveAgentConfig {
+  default: string;
+  concurrency: number;
+  timeoutSeconds: number;
+  retries: number;
+  sources: {
+    default: ConfigSource;
+    concurrency: ConfigSource;
+    timeoutSeconds: ConfigSource;
+    retries: ConfigSource;
+  };
+}
+
+export interface EffectiveScanConfig {
+  interactiveConfig: boolean;
+  source: ConfigSource;
 }
 
 export interface TaskResult {

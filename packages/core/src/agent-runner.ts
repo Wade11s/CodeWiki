@@ -9,6 +9,8 @@ export class FakeProvider implements AgentProvider {
       command: "fake-agent",
       version: "0.1.0",
       available: true,
+      health: "healthy",
+      default: false,
     };
   }
 

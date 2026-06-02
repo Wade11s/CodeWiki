@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { readSnapshot } from "@codewiki/core";
+import { readSnapshot, loadConfig } from "@codewiki/core";
 
 export async function askCommand(
   repoPath: string,
@@ -13,6 +13,9 @@ export async function askCommand(
     process.exit(1);
   }
 
+  const config = loadConfig(repoPath);
+  const effectiveAgent = options.agent || config.agent.default;
+
   const response = {
     answer: "Not yet implemented.",
     evidence: [],
@@ -21,6 +24,7 @@ export async function askCommand(
     stale: false,
     searchedScopes: ["index", "artifacts"],
     suggestedNextSteps: ["Run codewiki scan to refresh the index."],
+    agent: effectiveAgent,
   };
 
   if (options.json) {
@@ -30,5 +34,6 @@ export async function askCommand(
     console.log(`## Evidence\n\nNo evidence available.\n`);
     console.log(`## Confidence\n\n${response.confidence}\n`);
     console.log(`## Index\n\n- Snapshot: ${response.snapshotId}\n- Searched: ${response.searchedScopes.join(", ")}\n`);
+    console.log(`## Agent\n\n- Provider: ${effectiveAgent}\n`);
   }
 }
