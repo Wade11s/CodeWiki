@@ -182,6 +182,9 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
 
   const codewikiDir = join(repoPath, ".codewiki");
   mkdirSync(codewikiDir, { recursive: true });
+  mkdirSync(join(codewikiDir, "config"), { recursive: true });
+  mkdirSync(join(codewikiDir, "runs"), { recursive: true });
+  mkdirSync(join(codewikiDir, "site"), { recursive: true });
 
   const snapshot = createSnapshot(repoPath);
   writeSnapshot(repoPath, snapshot);
