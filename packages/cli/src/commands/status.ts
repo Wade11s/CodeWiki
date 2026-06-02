@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readSnapshot, loadConfig } from "@codewiki/core";
+import { readSnapshot, loadConfigWithSources } from "@codewiki/core";
 import { SkippedFilesArtifactSchema, SkipReasonSchema } from "@codewiki/core";
 import type { SkippedFilesArtifact, SkipReason } from "@codewiki/core";
 
@@ -32,7 +32,7 @@ function countSkippedByReason(skipped: SkippedFilesArtifact | null): Record<Skip
 
 export async function statusCommand(repoPath: string, options: { json?: boolean }): Promise<void> {
   const snapshot = readSnapshot(repoPath);
-  const config = loadConfig(repoPath);
+  const { agent, scan } = loadConfigWithSources(repoPath);
   const skipped = readSkippedFiles(repoPath);
   const skippedCounts = countSkippedByReason(skipped);
   const totalSkipped = skipped ? skipped.data.length : 0;
@@ -43,7 +43,19 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
   const status = {
     codewikiExists: exists,
     snapshot: snapshot || null,
-    config,
+    config: {
+      agent: {
+        default: agent.default,
+        concurrency: agent.concurrency,
+        timeoutSeconds: agent.timeoutSeconds,
+        retries: agent.retries,
+        sources: agent.sources,
+      },
+      scan: {
+        interactiveConfig: scan.interactiveConfig,
+        source: scan.source,
+      },
+    },
     stale: snapshot ? snapshot.gitDirty : false,
     schemaVersion: snapshot ? snapshot.schemaVersion : null,
     skippedFiles: totalSkipped,
@@ -65,9 +77,14 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
     } else {
       console.log("No snapshot found. Run 'codewiki scan' first.");
     }
-    console.log(`Default agent: ${config.agent.default}`);
-    console.log(`Concurrency: ${config.agent.concurrency}`);
-    console.log(`Timeout: ${config.agent.timeoutSeconds}s`);
+    console.log("");
+    console.log("Agent configuration:");
+    console.log(`  Default provider: ${agent.default} (${agent.sources.default})`);
+    console.log(`  Concurrency: ${agent.concurrency} (${agent.sources.concurrency})`);
+    console.log(`  Timeout: ${agent.timeoutSeconds}s (${agent.sources.timeoutSeconds})`);
+    console.log(`  Retries: ${agent.retries} (${agent.sources.retries})`);
+    console.log("");
+    console.log(`Scan interactive-config: ${scan.interactiveConfig} (${scan.source})`);
     if (totalSkipped > 0) {
       console.log(`Skipped files: ${totalSkipped}`);
       for (const [reason, count] of Object.entries(skippedCounts)) {

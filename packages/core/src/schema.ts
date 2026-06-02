@@ -67,9 +67,33 @@ export const EvidenceSchema = z.object({
   relatedSymbols: z.array(z.string()).optional(),
 });
 
+export const HealthStatusSchema = z.enum(["healthy", "degraded", "unavailable"]);
+
 export const DetectedAgentSchema = z.object({
   name: z.string(),
   command: z.string(),
   version: z.string().nullable(),
   available: z.boolean(),
+  health: HealthStatusSchema,
+  default: z.boolean(),
+});
+
+export const ConfigSourceSchema = z.enum(["default", "user", "repo"]);
+
+export const EffectiveAgentConfigSchema = z.object({
+  default: z.string(),
+  concurrency: z.number().int().min(1),
+  timeoutSeconds: z.number().int().min(1),
+  retries: z.number().int().min(0),
+  sources: z.object({
+    default: ConfigSourceSchema,
+    concurrency: ConfigSourceSchema,
+    timeoutSeconds: ConfigSourceSchema,
+    retries: ConfigSourceSchema,
+  }),
+});
+
+export const EffectiveScanConfigSchema = z.object({
+  interactiveConfig: z.boolean(),
+  source: ConfigSourceSchema,
 });

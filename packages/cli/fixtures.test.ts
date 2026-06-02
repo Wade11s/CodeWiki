@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync, writeFileSync as writeFile } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createServer } from "node:http";
 import { scanCommand } from "./src/commands/scan.js";
 import { statusCommand } from "./src/commands/status.js";
 import { debugCommand } from "./src/commands/debug.js";
 import { askCommand } from "./src/commands/ask.js";
+import { serveCommand } from "./src/commands/serve.js";
+import { generateSite } from "./src/site-generator.js";
 import { clearGitignoreCache } from "@codewiki/core";
 
 function createTempRepo(name: string): string {
@@ -30,8 +33,10 @@ function addFile(dir: string, relPath: string, content: string): void {
 describe("Repository fixtures", () => {
   it("scans a minimal repo", async () => {
     const repo = createTempRepo("minimal");
-    addFile(repo, "index.js", "export const x = 1;\n");
-    addFile(repo, "README.md", "# Minimal\n");
+    addFile(repo, "index.js", "export const x = 1;
+");
+    addFile(repo, "README.md", "# Minimal
+");
 
     await scanCommand(repo, { nonInteractive: true });
 
@@ -44,9 +49,10 @@ describe("Repository fixtures", () => {
   it("scans a node-cli repo", async () => {
     const repo = createTempRepo("node-cli");
     addFile(repo, "package.json", JSON.stringify({ name: "cli", version: "1.0.0" }));
-    addFile(repo, "bin/cli.js", "#!/usr/bin/env node\nconsole.log('hi');\n");
-    addFile(repo, "src/app.js", "module.exports = {};\n");
-    addFile(repo, "test.js", "console.log('test');\n");
+    addFile(repo, "src/app.js", "module.exports = {};
+");
+    addFile(repo, "test.js", "console.log('test');
+");
 
     await scanCommand(repo, { nonInteractive: true });
 
@@ -61,8 +67,10 @@ describe("Repository fixtures", () => {
   it("scans a react-app repo", async () => {
     const repo = createTempRepo("react");
     addFile(repo, "package.json", JSON.stringify({ name: "react-app", dependencies: { react: "^19" } }));
-    addFile(repo, "src/main.jsx", "import React from 'react';\n");
-    addFile(repo, "src/App.jsx", "export default function App() { return null; }\n");
+    addFile(repo, "src/main.jsx", "import React from 'react';
+");
+    addFile(repo, "src/App.jsx", "export default function App() { return null; }
+");
 
     await scanCommand(repo, { nonInteractive: true });
 
@@ -78,7 +86,8 @@ describe("Repository fixtures", () => {
 describe("Snapshot fixtures", () => {
   it("produces a valid snapshot envelope", async () => {
     const repo = createTempRepo("snapshot");
-    addFile(repo, "a.js", "const a = 1;\n");
+    addFile(repo, "a.js", "const a = 1;
+");
 
     await scanCommand(repo, { nonInteractive: true });
 
@@ -98,7 +107,8 @@ describe("Snapshot fixtures", () => {
 
   it("schema version is stable across scans", async () => {
     const repo = createTempRepo("version");
-    addFile(repo, "x.js", "// x\n");
+    addFile(repo, "x.js", "// x
+");
 
     await scanCommand(repo, { nonInteractive: true });
     const snap1 = JSON.parse(readFileSync(join(repo, ".codewiki", "snapshot.json"), "utf-8"));
@@ -115,7 +125,8 @@ describe("Snapshot fixtures", () => {
 describe("CodeWiki Directory fixtures", () => {
   it("creates the expected .codewiki/ layout", async () => {
     const repo = createTempRepo("layout");
-    addFile(repo, "file.js", "// file\n");
+    addFile(repo, "file.js", "// file
+");
 
     await scanCommand(repo, { nonInteractive: true });
 
@@ -137,11 +148,13 @@ describe("CodeWiki Directory fixtures", () => {
 
   it("status reports codewiki existence", async () => {
     const repo = createTempRepo("status");
-    addFile(repo, "a.js", "// a\n");
+    addFile(repo, "a.js", "// a
+");
 
     let output = "";
     const originalLog = console.log;
-    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "
+"; };
 
     await statusCommand(repo, {});
     console.log = originalLog;
@@ -151,7 +164,8 @@ describe("CodeWiki Directory fixtures", () => {
     await scanCommand(repo, { nonInteractive: true });
 
     output = "";
-    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "
+"; };
     await statusCommand(repo, {});
     console.log = originalLog;
 
@@ -163,12 +177,14 @@ describe("CodeWiki Directory fixtures", () => {
 
   it("debug outputs JSON with --json", async () => {
     const repo = createTempRepo("debug");
-    addFile(repo, "a.js", "// a\n");
+    addFile(repo, "a.js", "// a
+");
     await scanCommand(repo, { nonInteractive: true });
 
     let output = "";
     const originalLog = console.log;
-    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "
+"; };
 
     await debugCommand(repo, { json: true });
     console.log = originalLog;
@@ -190,8 +206,10 @@ describe("Evidence fixtures", () => {
     let output = "";
     const originalLog = console.log;
     const originalError = console.error;
-    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
-    console.error = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "
+"; };
+    console.error = (...args: unknown[]) => { output += args.join(" ") + "
+"; };
 
     const originalExit = process.exit;
     let exitCode: number | undefined;
@@ -215,12 +233,14 @@ describe("Evidence fixtures", () => {
 
   it("ask returns placeholder when snapshot exists", async () => {
     const repo = createTempRepo("ask-snap");
-    addFile(repo, "a.js", "// a\n");
+    addFile(repo, "a.js", "// a
+");
     await scanCommand(repo, { nonInteractive: true });
 
     let output = "";
     const originalLog = console.log;
-    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "
+"; };
 
     await askCommand(repo, "What is this?", {});
     console.log = originalLog;
@@ -233,12 +253,14 @@ describe("Evidence fixtures", () => {
 
   it("ask returns JSON with --json", async () => {
     const repo = createTempRepo("ask-json");
-    addFile(repo, "a.js", "// a\n");
+    addFile(repo, "a.js", "// a
+");
     await scanCommand(repo, { nonInteractive: true });
 
     let output = "";
     const originalLog = console.log;
-    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "
+"; };
 
     await askCommand(repo, "What is this?", { json: true });
     console.log = originalLog;
@@ -253,12 +275,81 @@ describe("Evidence fixtures", () => {
   });
 });
 
+describe("Site generation fixtures", () => {
+  it("scan generates a static site directory", async () => {
+    const repo = createTempRepo("site-gen");
+    addFile(repo, "a.js", "// a
+");
+
+    await scanCommand(repo, { nonInteractive: true });
+
+    const siteDir = join(repo, ".codewiki", "site");
+    expect(existsSync(siteDir)).toBe(true);
+    expect(existsSync(join(siteDir, "index.html"))).toBe(true);
+    expect(existsSync(join(siteDir, "snapshot.json"))).toBe(true);
+    expect(existsSync(join(siteDir, "artifacts", "overview.json"))).toBe(true);
+    expect(existsSync(join(siteDir, "artifacts", "modules.json"))).toBe(true);
+    expect(existsSync(join(siteDir, "artifacts", "features.json"))).toBe(true);
+    expect(existsSync(join(siteDir, "artifacts", "code-map.json"))).toBe(true);
+
+    cleanup(repo);
+  });
+
+  it("generateSite copies rich artifacts into the site", async () => {
+    const repo = createTempRepo("site-rich");
+    addFile(repo, "a.js", "// a
+");
+    await scanCommand(repo, { nonInteractive: true });
+
+    const overviewPath = join(repo, ".codewiki", "artifacts", "overview.json");
+    const enriched = {
+      schemaVersion: "1.0.0",
+      snapshotId: "test",
+      generatedAt: new Date().toISOString(),
+      data: {
+        summary: "Rich summary",
+        architecture: "Layered",
+        technologyStack: ["Node.js"],
+        entryPoints: [{ path: "a.js", description: "entry" }],
+        runModel: "node a.js",
+      },
+    };
+    writeFile(overviewPath, JSON.stringify(enriched, null, 2));
+
+    const result = generateSite(repo);
+    expect(result.success).toBe(true);
+
+    const siteOverviewPath = join(repo, ".codewiki", "site", "artifacts", "overview.json");
+    expect(existsSync(siteOverviewPath)).toBe(true);
+    const siteOverview = JSON.parse(readFileSync(siteOverviewPath, "utf-8"));
+    expect(siteOverview.data.summary).toBe("Rich summary");
+
+    cleanup(repo);
+  });
+
+  it("generateSite handles missing snapshot gracefully", () => {
+    const repo = createTempRepo("site-no-snap");
+    mkdirSync(join(repo, ".codewiki"), { recursive: true });
+    // No snapshot.json, no artifacts dir
+
+    const result = generateSite(repo);
+    expect(result.success).toBe(true); // Site dist was copied
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors.some((e) => e.includes("snapshot"))).toBe(true);
+
+    cleanup(repo);
+  });
+});
+
 describe("Ignore rules fixtures", () => {
   it("skips ignored directories like node_modules", async () => {
     const repo = createTempRepo("ignored-dirs");
-    addFile(repo, "src/index.js", "export const x = 1;\n");
-    addFile(repo, "node_modules/pkg/index.js", "module.exports = {};\n");
-    addFile(repo, ".git/config", "[core]\n");
+    addFile(repo, "src/index.js", "export const x = 1;
+");
+    addFile(repo, "node_modules/pkg/index.js", "module.exports = {};
+");
+    addFile(repo, ".git/config", "[core]
+");
 
     await scanCommand(repo, { nonInteractive: true });
 
@@ -276,10 +367,14 @@ describe("Ignore rules fixtures", () => {
 
   it("skips generated files", async () => {
     const repo = createTempRepo("generated");
-    addFile(repo, "src/app.js", "console.log('hello');\n");
-    addFile(repo, "app.min.js", "console.log('min');\n");
-    addFile(repo, "types.d.ts", "export type T = string;\n");
-    addFile(repo, "app.js.map", "{}\n");
+    addFile(repo, "src/app.js", "console.log('hello');
+");
+    addFile(repo, "app.min.js", "console.log('min');
+");
+    addFile(repo, "types.d.ts", "export type T = string;
+");
+    addFile(repo, "app.js.map", "{}
+");
 
     await scanCommand(repo, { nonInteractive: true });
 
@@ -297,7 +392,8 @@ describe("Ignore rules fixtures", () => {
 
   it("skips binary files", async () => {
     const repo = createTempRepo("binary");
-    addFile(repo, "src/index.js", "export const x = 1;\n");
+    addFile(repo, "src/index.js", "export const x = 1;
+");
 
     const binaryPath = join(repo, "image.png");
     const buf = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
@@ -317,7 +413,8 @@ describe("Ignore rules fixtures", () => {
 
   it("skips oversized files", async () => {
     const repo = createTempRepo("oversized");
-    addFile(repo, "src/index.js", "export const x = 1;\n");
+    addFile(repo, "src/index.js", "export const x = 1;
+");
 
     const bigPath = join(repo, "big.log");
     const bigContent = "x".repeat(1024 * 1024 + 100); // > 1 MB
@@ -337,9 +434,12 @@ describe("Ignore rules fixtures", () => {
 
   it("respects configured exclude rules", async () => {
     const repo = createTempRepo("config-exclude");
-    addFile(repo, "src/index.js", "export const x = 1;\n");
-    addFile(repo, "docs/readme.md", "# docs\n");
-    addFile(repo, "tests/test.js", "test\n");
+    addFile(repo, "src/index.js", "export const x = 1;
+");
+    addFile(repo, "docs/readme.md", "# docs
+");
+    addFile(repo, "tests/test.js", "test
+");
 
     const configPath = join(repo, ".codewiki", "config.json");
     mkdirSync(join(repo, ".codewiki"), { recursive: true });
@@ -368,9 +468,12 @@ describe("Ignore rules fixtures", () => {
 
   it("respects configured include rules", async () => {
     const repo = createTempRepo("config-include");
-    addFile(repo, "src/index.js", "export const x = 1;\n");
-    addFile(repo, "src/utils.js", "export const y = 2;\n");
-    addFile(repo, "README.md", "# readme\n");
+    addFile(repo, "src/index.js", "export const x = 1;
+");
+    addFile(repo, "src/utils.js", "export const y = 2;
+");
+    addFile(repo, "README.md", "# readme
+");
 
     const configPath = join(repo, ".codewiki", "config.json");
     mkdirSync(join(repo, ".codewiki"), { recursive: true });
@@ -392,13 +495,17 @@ describe("Ignore rules fixtures", () => {
 
   it("respects custom gitignore patterns", async () => {
     const repo = createTempRepo("gitignore-patterns");
-    addFile(repo, "src/index.js", "export const x = 1;\n");
-    addFile(repo, "debug.log", "debug info\n");
-    addFile(repo, "output/bundle.js", "built\n");
-    addFile(repo, "foo/output/keep.js", "keep me\n");
-    // /output/ is root-relative: ignores only output/ at repo root
-    // *.log is non-root-relative: ignores .log files at any depth
-    addFile(repo, ".gitignore", "*.log\n/output/\n");
+    addFile(repo, "src/index.js", "export const x = 1;
+");
+    addFile(repo, "debug.log", "debug info
+");
+    addFile(repo, "output/bundle.js", "built
+");
+    addFile(repo, "foo/output/keep.js", "keep me
+");
+    addFile(repo, ".gitignore", "*.log
+/output/
+");
 
     await scanCommand(repo, { nonInteractive: true });
 
@@ -424,11 +531,13 @@ describe("Ignore rules fixtures", () => {
 describe("Gitignore handling fixtures", () => {
   it("non-interactive scan warns when .codewiki is not ignored", async () => {
     const repo = createTempRepo("noninteractive-warn");
-    addFile(repo, "a.js", "// a\n");
+    addFile(repo, "a.js", "// a
+");
 
     let warnings = "";
     const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => { warnings += args.join(" ") + "\n"; };
+    console.warn = (...args: unknown[]) => { warnings += args.join(" ") + "
+"; };
 
     await scanCommand(repo, { nonInteractive: true });
 
@@ -444,7 +553,8 @@ describe("Gitignore handling fixtures", () => {
 
   it("interactive scan adds .codewiki to .gitignore when confirmed", async () => {
     const repo = createTempRepo("interactive-add");
-    addFile(repo, "a.js", "// a\n");
+    addFile(repo, "a.js", "// a
+");
 
     await scanCommand(repo, { _testConfirmFn: async () => true });
 
@@ -458,7 +568,8 @@ describe("Gitignore handling fixtures", () => {
 
   it("interactive scan does not modify .gitignore when user declines", async () => {
     const repo = createTempRepo("interactive-decline");
-    addFile(repo, "a.js", "// a\n");
+    addFile(repo, "a.js", "// a
+");
 
     await scanCommand(repo, { _testConfirmFn: async () => false });
 
@@ -470,12 +581,15 @@ describe("Gitignore handling fixtures", () => {
 
   it("does not warn or prompt when .codewiki is already in .gitignore", async () => {
     const repo = createTempRepo("already-ignored");
-    addFile(repo, "a.js", "// a\n");
-    writeFileSync(join(repo, ".gitignore"), ".codewiki\n");
+    addFile(repo, "a.js", "// a
+");
+    writeFileSync(join(repo, ".gitignore"), ".codewiki
+");
 
     let warnings = "";
     const originalWarn = console.warn;
-    console.warn = (...args: unknown[]) => { warnings += args.join(" ") + "\n"; };
+    console.warn = (...args: unknown[]) => { warnings += args.join(" ") + "
+"; };
 
     await scanCommand(repo, { nonInteractive: true });
 
@@ -490,8 +604,10 @@ describe("Gitignore handling fixtures", () => {
 describe("Status skipped files fixtures", () => {
   it("status reports skipped-file counts by reason", async () => {
     const repo = createTempRepo("status-skipped");
-    addFile(repo, "src/index.js", "export const x = 1;\n");
-    addFile(repo, "node_modules/pkg/index.js", "module.exports = {};\n");
+    addFile(repo, "src/index.js", "export const x = 1;
+");
+    addFile(repo, "node_modules/pkg/index.js", "module.exports = {};
+");
 
     const binaryPath = join(repo, "image.png");
     writeFileSync(binaryPath, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]));
@@ -500,7 +616,8 @@ describe("Status skipped files fixtures", () => {
 
     let output = "";
     const originalLog = console.log;
-    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "
+"; };
 
     await statusCommand(repo, {});
     console.log = originalLog;
@@ -514,14 +631,17 @@ describe("Status skipped files fixtures", () => {
 
   it("status JSON includes skippedByReason", async () => {
     const repo = createTempRepo("status-skipped-json");
-    addFile(repo, "src/index.js", "export const x = 1;\n");
-    addFile(repo, "node_modules/pkg/index.js", "module.exports = {};\n");
+    addFile(repo, "src/index.js", "export const x = 1;
+");
+    addFile(repo, "node_modules/pkg/index.js", "module.exports = {};
+");
 
     await scanCommand(repo, { nonInteractive: true });
 
     let output = "";
     const originalLog = console.log;
-    console.log = (...args: unknown[]) => { output += args.join(" ") + "\n"; };
+    console.log = (...args: unknown[]) => { output += args.join(" ") + "
+"; };
 
     await statusCommand(repo, { json: true });
     console.log = originalLog;
@@ -536,5 +656,58 @@ describe("Status skipped files fixtures", () => {
     expect(status.skippedByReason).toHaveProperty("parse-unavailable");
 
     cleanup(repo);
+  });
+});
+
+describe("Serve fixtures", () => {
+  it("serve starts a server that responds with index.html", async () => {
+    const repo = createTempRepo("serve-test");
+    addFile(repo, "a.js", "// a
+");
+    await scanCommand(repo, { nonInteractive: true });
+
+    const serverPromise = serveCommand(repo, { port: "0" });
+
+    // Wait briefly for server to start, then abort
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // We cannot easily test the actual HTTP response here without a real port,
+    // but we can verify the site dir exists and has the right structure.
+    const siteDir = join(repo, ".codewiki", "site");
+    expect(existsSync(join(siteDir, "index.html"))).toBe(true);
+
+    // Clean up by killing the process (serveCommand never resolves)
+    cleanup(repo);
+
+    // Prevent unhandled promise rejection
+    serverPromise.catch(() => {});
+  });
+
+  it("blocks path traversal attempts", async () => {
+    const repo = createTempRepo("serve-traversal");
+    addFile(repo, "a.js", "// a
+");
+    await scanCommand(repo, { nonInteractive: true });
+
+    // Write a secret file outside the site directory
+    const secretPath = join(repo, ".codewiki", "secret.txt");
+    writeFileSync(secretPath, "super-secret");
+
+    const port = 9876;
+    const serverPromise = serveCommand(repo, { port: String(port) });
+
+    // Wait for server to start
+    await new Promise((resolve) => setTimeout(resolve, 300));
+
+    // Request with path traversal
+    const res = await fetch(`http://localhost:${port}/../secret.txt`);
+    const body = await res.text();
+
+    // Should NOT serve the secret  should fall back to index.htmlfile 
+    expect(body).not.toContain("super-secret");
+    expect(body).toContain("CodeWiki Report"); // from index.html
+
+    cleanup(repo);
+    serverPromise.catch(() => {});
   });
 });

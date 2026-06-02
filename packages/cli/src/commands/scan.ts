@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { createSnapshot, writeSnapshot, loadConfig, writeRepoConfig } from "@codewiki/core";
+import { generateSite } from "../site-generator.js";
 import { shouldSkipFile, shouldSkipDir, isCodewikiIgnored, addCodewikiToGitignore } from "@codewiki/core";
 import type { SkippedFile, ScanConfig } from "@codewiki/core";
 
@@ -8,6 +9,7 @@ interface ScanOptions {
   concurrency?: string;
   timeout?: string;
   retries?: string;
+  agent?: string;
   writeConfig?: boolean;
   nonInteractive?: boolean;
   _testConfirmFn?: () => Promise<boolean>;
@@ -150,6 +152,15 @@ async function promptAddToGitignore(
   }
 }
 
+function parseValidatedInt(value: string, min: number, name: string): number {
+  const parsed = parseInt(value, 10);
+  if (Number.isNaN(parsed) || parsed < min) {
+    console.error(`Error: Invalid ${name} "${value}". Expected an integer >= ${min}.`);
+    process.exit(1);
+  }
+  return parsed;
+}
+
 export async function scanCommand(repoPath: string, options: ScanOptions): Promise<void> {
   if (!existsSync(repoPath)) {
     console.error(`Error: Repository path does not exist: ${repoPath}`);
@@ -158,9 +169,16 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
 
   const config = loadConfig(repoPath);
 
-  const concurrency = options.concurrency ? parseInt(options.concurrency, 10) : config.agent.concurrency;
-  const timeoutSeconds = options.timeout ? parseInt(options.timeout, 10) : config.agent.timeoutSeconds;
-  const retries = options.retries ? parseInt(options.retries, 10) : config.agent.retries;
+  const concurrency = options.concurrency
+    ? parseValidatedInt(options.concurrency, 1, "concurrency")
+    : config.agent.concurrency;
+  const timeoutSeconds = options.timeout
+    ? parseValidatedInt(options.timeout, 1, "timeout")
+    : config.agent.timeoutSeconds;
+  const retries = options.retries
+    ? parseValidatedInt(options.retries, 0, "retries")
+    : config.agent.retries;
+  const agent = options.agent || config.agent.default;
 
   const codewikiDir = join(repoPath, ".codewiki");
   mkdirSync(codewikiDir, { recursive: true });
@@ -179,8 +197,20 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
         concurrency,
         timeoutSeconds,
         retries,
+        default: agent,
       },
     });
+  }
+
+  const siteResult = generateSite(repoPath);
+  if (siteResult.success) {
+    console.log(`Site: ${siteResult.siteDir}`);
+  }
+  if (siteResult.errors.length > 0) {
+    console.error(`Site generation warnings:`);
+    for (const err of siteResult.errors) {
+      console.error(`  - ${err}`);
+    }
   }
 
   // Check if .codewiki is ignored

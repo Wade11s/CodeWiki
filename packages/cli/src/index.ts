@@ -5,7 +5,7 @@ import { serveCommand } from "./commands/serve.js";
 import { askCommand } from "./commands/ask.js";
 import { statusCommand } from "./commands/status.js";
 import { debugCommand } from "./commands/debug.js";
-import { agentsCommand } from "./commands/agents.js";
+import { agentsCommand, selectAgentCommand } from "./commands/agents.js";
 
 const program = new Command();
 
@@ -20,9 +20,10 @@ program
   .option("-c, --concurrency <n>", "Number of concurrent agent tasks")
   .option("-t, --timeout <seconds>", "Timeout per task in seconds")
   .option("-r, --retries <n>", "Number of retries per task")
+  .option("-a, --agent <agent>", "Override the default agent for this scan")
   .option("--write-config", "Write scan options to repo config")
   .option("--non-interactive", "Do not prompt for interactive actions")
-  .action(async (repo: string, options: { concurrency?: string; timeout?: string; retries?: string; writeConfig?: boolean; nonInteractive?: boolean }) => {
+  .action(async (repo: string, options: { concurrency?: string; timeout?: string; retries?: string; agent?: string; writeConfig?: boolean; nonInteractive?: boolean }) => {
     await scanCommand(repo, options);
   });
 
@@ -64,8 +65,13 @@ program
   .command("agents")
   .description("Detect local agent CLIs")
   .option("--json", "Output JSON instead of text")
-  .action(async (options: { json?: boolean }) => {
-    await agentsCommand(options);
+  .option("--select", "Interactively select the default provider")
+  .action(async (options: { json?: boolean; select?: boolean }) => {
+    if (options.select) {
+      await selectAgentCommand();
+    } else {
+      await agentsCommand(options);
+    }
   });
 
 program.parse();
