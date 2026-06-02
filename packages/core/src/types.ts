@@ -117,3 +117,73 @@ export interface AgentProvider {
     timeoutSeconds: number;
   }): Promise<TaskResult>;
 }
+
+export type ScanPhase =
+  | "idle"
+  | "indexing"
+  | "feature_extraction"
+  | "agent_tasks"
+  | "validation"
+  | "site_generation"
+  | "complete"
+  | "failed";
+
+export interface ModulePartition {
+  name: string;
+  files: string[];
+  type: "package" | "directory" | "orphan";
+}
+
+export interface TaskRecord {
+  taskId: string;
+  moduleName: string;
+  phase: ScanPhase;
+  status: "pending" | "running" | "success" | "failed" | "skipped";
+  startedAt: string | null;
+  completedAt: string | null;
+  durationMs: number;
+  retriesUsed: number;
+  error: string | null;
+  stdout: string;
+  stderr: string;
+  validationErrors: string[];
+}
+
+export interface ModuleResult {
+  moduleName: string;
+  status: "complete" | "incomplete" | "failed";
+  files: string[];
+  artifacts: Artifact[];
+  diagnostics: string[];
+}
+
+export interface RunRecord {
+  runId: string;
+  snapshotId: string;
+  startedAt: string;
+  completedAt: string | null;
+  phase: ScanPhase;
+  status: "running" | "success" | "partial" | "failed";
+  modules: ModuleResult[];
+  tasks: TaskRecord[];
+  skippedFiles: string[];
+  failedTaskCount: number;
+  incompleteModuleCount: number;
+  config: AgentConfig;
+}
+
+export interface ArtifactValidationResult {
+  valid: boolean;
+  errors: string[];
+  warnings: string[];
+}
+
+export interface ScanDiagnostics {
+  runId: string;
+  phase: ScanPhase;
+  timestamp: string;
+  message: string;
+  level: "info" | "warn" | "error";
+  taskId?: string;
+  moduleName?: string;
+}

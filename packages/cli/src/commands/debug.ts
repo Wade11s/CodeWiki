@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readSnapshot, loadConfig } from "@codewiki/core";
+import { readSnapshot, loadConfig, readLatestRun } from "@codewiki/core";
 
 function listRuns(codewikiDir: string): Array<{ runId: string; tasks: string[] }> {
   const runsDir = join(codewikiDir, "runs");
@@ -15,9 +15,19 @@ function listRuns(codewikiDir: string): Array<{ runId: string; tasks: string[] }
   return runs;
 }
 
+function readTaskFile(codewikiDir: string, runId: string, taskId: string): unknown {
+  const taskPath = join(codewikiDir, "runs", runId, "tasks", `${taskId}.json`);
+  if (!existsSync(taskPath)) return { error: `Task not found: ${taskId}` };
+  try {
+    return JSON.parse(readFileSync(taskPath, "utf-8"));
+  } catch {
+    return { error: "Failed to parse task file" };
+  }
+}
+
 export async function debugCommand(
   repoPath: string,
-  options: { json?: boolean; task?: string }
+  options: { json?: boolean; task?: string; run?: string }
 ): Promise<void> {
   const snapshot = readSnapshot(repoPath);
   const config = loadConfig(repoPath);
@@ -31,26 +41,53 @@ export async function debugCommand(
   const artifactFiles = existsSync(artifactsDir) ? readdirSync(artifactsDir) : [];
   const runs = listRuns(codewikiDir);
 
-  const debug = {
+  const targetRunId = options.run || runs[0]?.runId;
+  const latestRun = targetRunId ? readLatestRun(codewikiDir) : null;
+
+  const debug: Record<string, unknown> = {
     codewikiExists: exists,
     snapshot,
     config,
     indexFiles,
     artifactFiles,
     runs,
-    taskDetails: null as unknown,
+    runDiagnostics: null,
+    taskDiagnostics: null,
   };
 
+  if (targetRunId && latestRun && latestRun.runId === targetRunId) {
+    debug.runDiagnostics = {
+      runId: latestRun.runId,
+      phase: latestRun.phase,
+      status: latestRun.status,
+      startedAt: latestRun.startedAt,
+      completedAt: latestRun.completedAt,
+      moduleSummary: latestRun.modules.map((m) => ({
+        name: m.moduleName,
+        status: m.status,
+        fileCount: m.files.length,
+        artifactCount: m.artifacts.length,
+        diagnostics: m.diagnostics,
+      })),
+      taskSummary: latestRun.tasks.map((t) => ({
+        taskId: t.taskId,
+        moduleName: t.moduleName,
+        status: t.status,
+        durationMs: t.durationMs,
+        retriesUsed: t.retriesUsed,
+        validationErrors: t.validationErrors,
+      })),
+      skippedFiles: latestRun.skippedFiles,
+    };
+  }
+
   if (options.task) {
-    const taskPath = join(codewikiDir, "runs", options.task, "tasks", `${options.task}.json`);
-    if (existsSync(taskPath)) {
-      try {
-        debug.taskDetails = JSON.parse(readFileSync(taskPath, "utf-8"));
-      } catch {
-        debug.taskDetails = { error: "Failed to parse task file" };
-      }
+    // Find task in latest run or specified run
+    const searchRunId = options.run || runs[0]?.runId;
+    if (searchRunId) {
+      debug.taskDiagnostics = readTaskFile(codewikiDir, searchRunId, options.task);
     } else {
-      debug.taskDetails = { error: `Task not found: ${options.task}` };
+      debug.taskDiagnostics = { error: "No runs available to search for task" };
     }
   }
 
@@ -73,9 +110,26 @@ export async function debugCommand(
     for (const run of runs) {
       console.log(`  ${run.runId}: ${run.tasks.length} tasks`);
     }
-    if (debug.taskDetails) {
-      console.log("Task details:");
-      console.log(JSON.stringify(debug.taskDetails, null, 2));
+    if (debug.runDiagnostics) {
+      const rd = debug.runDiagnostics as Record<string, unknown>;
+      console.log(`\nRun diagnostics (${rd.runId}):`);
+      console.log(`  Phase: ${rd.phase}`);
+      console.log(`  Status: ${rd.status}`);
+      const modules = rd.moduleSummary as Array<Record<string, unknown>> | undefined;
+      if (modules) {
+        for (const m of modules) {
+          console.log(`  Module ${m.name}: ${m.status} (${m.fileCount} files, ${m.artifactCount} artifacts)`);
+          if (m.diagnostics && (m.diagnostics as string[]).length > 0) {
+            for (const d of m.diagnostics as string[]) {
+              console.log(`    - ${d}`);
+            }
+          }
+        }
+      }
+    }
+    if (debug.taskDiagnostics) {
+      console.log("\nTask diagnostics:");
+      console.log(JSON.stringify(debug.taskDiagnostics, null, 2));
     }
   }
 }

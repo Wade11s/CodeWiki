@@ -57,7 +57,8 @@ program
   .description("Expose detailed run and task diagnostics")
   .option("--json", "Output JSON instead of text")
   .option("--task <task-id>", "Focus on a specific task")
-  .action(async (repo: string, options: { json?: boolean; task?: string }) => {
+  .option("--run <run-id>", "Focus on a specific run")
+  .action(async (repo: string, options: { json?: boolean; task?: string; run?: string }) => {
     await debugCommand(repo, options);
   });
 

@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { readSnapshot, loadConfigWithSources } from "@codewiki/core";
+import { readSnapshot, loadConfigWithSources, readLatestRun } from "@codewiki/core";
 import { SkippedFilesArtifactSchema, SkipReasonSchema } from "@codewiki/core";
 import type { SkippedFilesArtifact, SkipReason } from "@codewiki/core";
 
@@ -39,6 +39,7 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
 
   const codewikiDir = join(repoPath, ".codewiki");
   const exists = existsSync(codewikiDir);
+  const latestRun = exists ? readLatestRun(codewikiDir) : null;
 
   const status = {
     codewikiExists: exists,
@@ -58,9 +59,15 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
     },
     stale: snapshot ? snapshot.gitDirty : false,
     schemaVersion: snapshot ? snapshot.schemaVersion : null,
+    latestRunId: latestRun?.runId || null,
+    scanPhase: latestRun?.phase || "idle",
+    failedTasks: latestRun?.failedTaskCount || 0,
+    incompleteModules: latestRun?.incompleteModuleCount || 0,
     skippedFiles: totalSkipped,
     skippedByReason: skippedCounts,
-    failedTasks: 0,
+    runStatus: latestRun?.status || null,
+    modulesAnalyzed: latestRun?.modules?.length || 0,
+    modulesComplete: latestRun ? latestRun.modules.filter((m) => m.status === "complete").length : 0,
   };
 
   if (options.json) {
@@ -92,6 +99,16 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
           console.log(`  ${reason}: ${count}`);
         }
       }
+    }
+
+    if (latestRun) {
+      console.log("");
+      console.log(`Latest run: ${latestRun.runId}`);
+      console.log(`Scan phase: ${latestRun.phase}`);
+      console.log(`Run status: ${latestRun.status}`);
+      console.log(`Modules: ${latestRun.modules.length} (${latestRun.modules.filter((m) => m.status === "complete").length} complete)`);
+      console.log(`Incomplete modules: ${latestRun.incompleteModuleCount}`);
+      console.log(`Failed tasks: ${latestRun.failedTaskCount}`);
     }
   }
 }
