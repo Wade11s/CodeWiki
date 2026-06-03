@@ -1,5 +1,4 @@
 import { describe, it, expect } from "bun:test";
-import { glob } from "glob";
 import * as fs from "fs";
 import * as path from "path";
 

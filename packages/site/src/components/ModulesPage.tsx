@@ -106,19 +106,21 @@ export default function ModulesPage({ data, onSelectEvidence }: Props) {
               )}
             </div>
 
-            <code
-              style={{
-                display: "inline-block",
-                fontSize: "0.8125rem",
-                color: "#475569",
-                background: "#f1f5f9",
-                padding: "0.25rem 0.5rem",
-                borderRadius: "0.25rem",
-                marginBottom: "0.75rem",
-              }}
-            >
-              {mod.path}
-            </code>
+            {mod.path && (
+              <code
+                style={{
+                  display: "inline-block",
+                  fontSize: "0.8125rem",
+                  color: "#475569",
+                  background: "#f1f5f9",
+                  padding: "0.25rem 0.5rem",
+                  borderRadius: "0.25rem",
+                  marginBottom: "0.75rem",
+                }}
+              >
+                {mod.path}
+              </code>
+            )}
 
             {mod.summary && (
               <p style={{ margin: "0 0 0.75rem", lineHeight: 1.6, color: "#334155" }}>
