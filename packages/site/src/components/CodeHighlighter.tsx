@@ -7,6 +7,14 @@ interface Props {
 }
 
 function detectLanguage(filePath: string): string {
+  const basename = filePath.split("/").pop()?.toLowerCase() ?? "";
+  const basenameMap: Record<string, string> = {
+    dockerfile: "dockerfile",
+    makefile: "makefile",
+    jenkinsfile: "groovy",
+  };
+  if (basenameMap[basename]) return basenameMap[basename];
+
   const ext = filePath.split(".").pop()?.toLowerCase() ?? "";
   const map: Record<string, string> = {
     ts: "typescript",
@@ -38,7 +46,6 @@ function detectLanguage(filePath: string): string {
     zsh: "bash",
     sql: "sql",
     xml: "xml",
-    dockerfile: "dockerfile",
   };
   return map[ext] || "text";
 }

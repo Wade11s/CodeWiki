@@ -31,4 +31,19 @@ describe("detectLanguage", () => {
     expect(detectLanguage("README")).toBe("text");
     expect(detectLanguage("config.xyz")).toBe("text");
   });
+
+  it("detects Dockerfile by basename", () => {
+    expect(detectLanguage("/project/Dockerfile")).toBe("dockerfile");
+    expect(detectLanguage("Dockerfile")).toBe("dockerfile");
+  });
+
+  it("detects Makefile by basename", () => {
+    expect(detectLanguage("/project/Makefile")).toBe("makefile");
+    expect(detectLanguage("Makefile")).toBe("makefile");
+  });
+
+  it("detects Jenkinsfile by basename", () => {
+    expect(detectLanguage("/ci/Jenkinsfile")).toBe("groovy");
+    expect(detectLanguage("Jenkinsfile")).toBe("groovy");
+  });
 });

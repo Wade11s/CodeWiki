@@ -50,7 +50,7 @@ export interface OverviewData {
 export interface ModuleData {
   type?: "module";
   name: string;
-  path: string;
+  path?: string;
   summary: string;
   dependencies?: string[];
   incomplete?: boolean;
