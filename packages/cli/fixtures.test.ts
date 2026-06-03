@@ -221,7 +221,7 @@ describe("Evidence fixtures", () => {
     cleanup(repo);
   });
 
-  it("ask returns placeholder when snapshot exists", async () => {
+  it("ask returns refusal when evidence is insufficient", async () => {
     const repo = createTempRepo("ask-snap");
     addFile(repo, "a.js", "// a\n");
     await scanCommand(repo, { nonInteractive: true });
@@ -233,7 +233,7 @@ describe("Evidence fixtures", () => {
     await askCommand(repo, "What is this?", {});
     console.log = originalLog;
 
-    expect(output).toContain("Not yet implemented");
+    expect(output).toContain("No answer: insufficient indexed evidence.");
     expect(output).toContain("Snapshot:");
 
     cleanup(repo);
