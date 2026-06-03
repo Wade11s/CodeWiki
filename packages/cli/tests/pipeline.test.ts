@@ -351,4 +351,60 @@ describe("Pipeline acceptance criteria", () => {
 
     cleanup(repo);
   });
+
+  it("writes enriched modules.json with agent analysis data", async () => {
+    const repo = createTempRepo("enriched-modules");
+    addFile(repo, "src/a.ts", "export const a = 1;\n");
+    addFile(repo, "package.json", JSON.stringify({ name: "test-pkg", dependencies: { react: "^19" } }));
+
+    const runner = new AgentRunner();
+    const fake = new FakeProvider("codex");
+    fake.setBehavior("validate");
+    runner.register(fake);
+
+    await scanCommand(repo, { runner, nonInteractive: true });
+
+    const modulesPath = join(repo, ".codewiki", "artifacts", "modules.json");
+    expect(existsSync(modulesPath)).toBe(true);
+
+    const modules = JSON.parse(readFileSync(modulesPath, "utf-8"));
+    expect(Array.isArray(modules.data)).toBe(true);
+    expect(modules.data.length).toBeGreaterThanOrEqual(1);
+
+    const mod = modules.data[0];
+    expect(mod).toHaveProperty("name");
+    expect(mod).toHaveProperty("path");
+    expect(mod).toHaveProperty("summary");
+    expect(mod).toHaveProperty("files");
+    expect(Array.isArray(mod.files)).toBe(true);
+
+    cleanup(repo);
+  });
+
+  it("marks incomplete modules in modules.json when agent tasks fail", async () => {
+    const repo = createTempRepo("incomplete-modules");
+    addFile(repo, "src/a.ts", "export const a = 1;\n");
+    addFile(repo, "lib/b.ts", "export const b = 2;\n");
+
+    const runner = new AgentRunner();
+    const selective = new SelectiveFakeProvider();
+    selective.setFailModules(["lib"]);
+    runner.register(selective);
+
+    await scanCommand(repo, { runner, agent: "selective-fake", nonInteractive: true });
+
+    const modulesPath = join(repo, ".codewiki", "artifacts", "modules.json");
+    const modules = JSON.parse(readFileSync(modulesPath, "utf-8"));
+
+    const failedMod = modules.data.find((m: { name: string; incomplete?: boolean }) => m.name === "lib");
+    expect(failedMod).toBeTruthy();
+    expect(failedMod.incomplete).toBe(true);
+
+    const successMod = modules.data.find((m: { name: string; incomplete?: boolean }) => m.name === "src");
+    if (successMod) {
+      expect(successMod.incomplete).not.toBe(true);
+    }
+
+    cleanup(repo);
+  });
 });

@@ -9,7 +9,7 @@ import { debugCommand } from "./src/commands/debug.js";
 import { askCommand } from "./src/commands/ask.js";
 import { serveCommand } from "./src/commands/serve.js";
 import { generateSite } from "./src/site-generator.js";
-import { clearGitignoreCache, CodeWikiError } from "@codewiki/core";
+import { clearGitignoreCache, CodeWikiError, AgentRunner, FakeProvider } from "@codewiki/core";
 
 const tempRepos: string[] = [];
 
@@ -320,6 +320,35 @@ describe("Site generation fixtures", () => {
     expect(result.success).toBe(true); // Site dist was copied
     expect(result.errors.length).toBeGreaterThan(0);
     expect(result.errors.some((e) => e.includes("snapshot"))).toBe(true);
+
+    cleanup(repo);
+  });
+
+  it("site modules.json includes enriched agent data", async () => {
+    const repo = createTempRepo("site-modules");
+    addFile(repo, "src/core.ts", "export const core = 1;\n");
+    addFile(repo, "package.json", JSON.stringify({ name: "test-pkg" }));
+
+    const runner = new AgentRunner();
+    const fake = new FakeProvider("codex");
+    fake.setBehavior("validate");
+    runner.register(fake);
+
+    await scanCommand(repo, { runner, nonInteractive: true });
+
+    const siteModulesPath = join(repo, ".codewiki", "site", "artifacts", "modules.json");
+    expect(existsSync(siteModulesPath)).toBe(true);
+
+    const modules = JSON.parse(readFileSync(siteModulesPath, "utf-8"));
+    expect(Array.isArray(modules.data)).toBe(true);
+    expect(modules.data.length).toBeGreaterThanOrEqual(1);
+
+    const mod = modules.data[0];
+    expect(mod).toHaveProperty("name");
+    expect(mod).toHaveProperty("path");
+    expect(mod).toHaveProperty("summary");
+    expect(mod).toHaveProperty("files");
+    expect(Array.isArray(mod.files)).toBe(true);
 
     cleanup(repo);
   });
