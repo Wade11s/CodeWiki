@@ -57,4 +57,38 @@ describe("OverviewPage", () => {
     expect(html).toContain("Run with npm start.");
     expect(html).toContain("Run Model");
   });
+
+  it("renders stats when present", () => {
+    const data: OverviewData = {
+      modulesAnalyzed: 5,
+      modulesComplete: 4,
+      modulesFailed: 1,
+      totalFiles: 120,
+      skippedFiles: 3,
+    };
+    const html = renderToString(<OverviewPage data={data} />);
+    expect(html).toContain("Modules analyzed");
+    expect(html).toContain("5");
+    expect(html).toContain("Complete");
+    expect(html).toContain("4");
+    expect(html).toContain("Failed");
+    expect(html).toContain("1");
+  });
+
+  it("renders claims with evidence", () => {
+    const data: OverviewData = {
+      summary: "A repo.",
+      claims: [
+        {
+          statement: "Uses TypeScript.",
+          evidence: [
+            { filePath: "tsconfig.json", lineStart: 1, lineEnd: 2, snippet: "{}" },
+          ],
+        },
+      ],
+    };
+    const html = renderToString(<OverviewPage data={data} />);
+    expect(html).toContain("Uses TypeScript.");
+    expect(html).toContain("tsconfig.json:1-2");
+  });
 });
