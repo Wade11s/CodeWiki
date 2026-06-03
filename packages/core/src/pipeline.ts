@@ -4,6 +4,8 @@ import { randomUUID } from "node:crypto";
 import type {
   AgentConfig,
   Artifact,
+  Evidence,
+  ModuleData,
   ModulePartition,
   ModuleResult,
   PipelineRunRecord,
@@ -223,6 +225,7 @@ export interface PipelineOptions {
   providerName: string;
   runner: AgentRunner;
   codewikiDir: string;
+  indexerModules?: import("./types.js").Module[];
 }
 
 export interface PipelineResult {
@@ -231,7 +234,7 @@ export interface PipelineResult {
 }
 
 export async function runPipeline(options: PipelineOptions): Promise<PipelineResult> {
-  const { repoPath, snapshot, files, skippedFiles, config, providerName, runner, codewikiDir } = options;
+  const { repoPath, snapshot, files, skippedFiles, config, providerName, runner, codewikiDir, indexerModules } = options;
 
   const featureCandidates = extractPipelineFeatureCandidates(files);
   const modules = partitionModules(files);
@@ -349,6 +352,61 @@ Produce JSON with:
   const artifactsDir = join(codewikiDir, "artifacts");
   mkdirSync(artifactsDir, { recursive: true });
 
+  // Build enriched module artifacts combining indexer data with agent analysis
+  const enrichedModules: ModuleData[] = [];
+  for (const modResult of runRecord.modules) {
+    // Find matching indexer module by file overlap
+    const indexerModule = indexerModules?.find((im) =>
+      modResult.files.length > 0 && modResult.files.every((f) => im.files.includes(f))
+    );
+
+    // Find task output for this module
+    const task = runRecord.tasks.find((t) => t.moduleName === modResult.moduleName);
+    let agentOutput: {
+      summary?: string;
+      keyFeatures?: string[];
+      complexity?: string;
+      evidence?: Array<{ filePath?: string; lineStart?: number; lineEnd?: number; snippet?: string }>;
+    } = {};
+
+    if (task && task.status === "success" && modResult.status === "complete") {
+      try {
+        agentOutput = JSON.parse(task.stdout);
+      } catch {
+        agentOutput = { summary: task.stdout };
+      }
+    }
+
+    const evidence: Evidence[] = (agentOutput.evidence || []).map((e) => ({
+      filePath: e.filePath || "",
+      lineStart: e.lineStart || 1,
+      lineEnd: e.lineEnd || 1,
+      snippet: e.snippet || "",
+    }));
+
+    enrichedModules.push({
+      type: "module",
+      name: indexerModule?.name || modResult.moduleName,
+      path: indexerModule?.path || modResult.moduleName,
+      summary: agentOutput.summary || "",
+      files: indexerModule?.files || modResult.files,
+      dependencies: indexerModule?.dependencies,
+      incomplete: modResult.status !== "complete",
+      keyFeatures: agentOutput.keyFeatures || [],
+      complexity: agentOutput.complexity as "low" | "medium" | "high" | undefined,
+      claims: agentOutput.summary
+        ? [{ statement: agentOutput.summary, evidence }]
+        : [],
+    });
+  }
+
+  const modulesArtifact: Artifact = {
+    schemaVersion: "1.0.0",
+    snapshotId: snapshot.id,
+    generatedAt: new Date().toISOString(),
+    data: enrichedModules,
+  };
+
   // Synthetic artifacts are system-generated and don't require evidence,
   // but we still validate envelope fields and snapshot binding.
   const indexFactsForSynthetic = loadIndexFacts(codewikiDir) || { symbols: [], imports: [], blocks: [], modules: [] };
@@ -387,6 +445,10 @@ Produce JSON with:
   }
   allArtifacts.push(codeMapArtifact);
 
+  writeFileSync(
+    join(artifactsDir, "modules.json"),
+    JSON.stringify(modulesArtifact, null, 2)
+  );
   writeFileSync(
     join(artifactsDir, "overview.json"),
     JSON.stringify(overviewArtifact, null, 2)

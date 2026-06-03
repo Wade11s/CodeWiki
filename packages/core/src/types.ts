@@ -45,10 +45,14 @@ export interface OverviewData {
 export interface ModuleData {
   type: "module";
   name: string;
+  path: string;
   summary: string;
-  keyFeatures: string[];
-  complexity: "low" | "medium" | "high";
-  claims: Claim[];
+  files?: string[];
+  dependencies?: string[];
+  incomplete?: boolean;
+  keyFeatures?: string[];
+  complexity?: "low" | "medium" | "high";
+  claims?: Claim[];
 }
 
 export interface FeatureData {

@@ -249,6 +249,7 @@ export async function scanCommand(repoPath: string, options: ScanOptions): Promi
     providerName,
     runner,
     codewikiDir,
+    indexerModules: indexerResult.modules,
   });
 
   if (options.writeConfig) {

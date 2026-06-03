@@ -88,10 +88,14 @@ export const OverviewDataSchema = z.object({
 export const ModuleDataSchema = z.object({
   type: z.literal("module"),
   name: z.string(),
+  path: z.string(),
   summary: z.string(),
-  keyFeatures: z.array(z.string()),
-  complexity: z.enum(["low", "medium", "high"]),
-  claims: z.array(ClaimSchema),
+  files: z.array(z.string()).optional(),
+  dependencies: z.array(z.string()).optional(),
+  incomplete: z.boolean().optional(),
+  keyFeatures: z.array(z.string()).optional(),
+  complexity: z.enum(["low", "medium", "high"]).optional(),
+  claims: z.array(ClaimSchema).optional(),
 });
 
 export const FeatureDataSchema = z.object({
