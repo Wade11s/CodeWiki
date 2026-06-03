@@ -22,7 +22,68 @@ export interface Evidence {
   lineEnd: number;
   snippet: string;
   symbol?: string;
+  blockId?: string;
   relatedSymbols?: string[];
+}
+
+export interface Claim {
+  statement: string;
+  evidence: Evidence[];
+}
+
+export interface OverviewData {
+  type: "overview";
+  summary: string;
+  modulesAnalyzed: number;
+  modulesComplete: number;
+  modulesFailed: number;
+  totalFiles: number;
+  skippedFiles: number;
+  claims?: Claim[];
+}
+
+export interface ModuleData {
+  type: "module";
+  name: string;
+  summary: string;
+  keyFeatures: string[];
+  complexity: "low" | "medium" | "high";
+  claims: Claim[];
+}
+
+export interface FeatureData {
+  type: "feature";
+  id: string;
+  category: string;
+  name: string;
+  description?: string;
+  claims: Claim[];
+}
+
+export interface CodeMapData {
+  type: "code-map";
+  files: Array<{ path: string; module: string }>;
+  modules: Array<{ name: string; type: string; fileCount: number }>;
+  claims?: Claim[];
+}
+
+export interface ValidationError {
+  code: string;
+  path: string;
+  message: string;
+}
+
+export interface ValidationResult {
+  valid: boolean;
+  errors: ValidationError[];
+  warnings: ValidationError[];
+}
+
+export interface IndexFacts {
+  symbols: CodeSymbol[];
+  imports: Import[];
+  blocks: Block[];
+  modules: Module[];
 }
 
 export interface FeatureCandidate {
@@ -202,6 +263,13 @@ export interface IndexerResult {
   modules: Module[];
 }
 
+export interface IndexFacts {
+  symbols: CodeSymbol[];
+  imports: Import[];
+  blocks: Block[];
+  modules: Module[];
+}
+
 export interface TaskResult {
   taskId: string;
   exitCode: number;
@@ -209,7 +277,7 @@ export interface TaskResult {
   stdout: string;
   stderr: string;
   retries: number;
-  validationErrors: string[];
+  validationErrors: ValidationError[];
   state: TaskState;
 }
 
@@ -237,7 +305,7 @@ export interface TaskRunRecord {
   stderr: string;
   durationMs: number;
   retries: number;
-  validationErrors: string[];
+  validationErrors: ValidationError[];
   startedAt: string;
   completedAt: string;
 }
@@ -287,7 +355,7 @@ export interface PipelineTaskRecord {
   error: string | null;
   stdout: string;
   stderr: string;
-  validationErrors: string[];
+  validationErrors: ValidationError[];
 }
 
 export interface ModuleResult {
@@ -310,13 +378,14 @@ export interface PipelineRunRecord {
   skippedFiles: string[];
   failedTaskCount: number;
   incompleteModuleCount: number;
+  validationFailureCount: number;
   config: AgentConfig;
 }
 
 export interface ArtifactValidationResult {
   valid: boolean;
-  errors: string[];
-  warnings: string[];
+  errors: ValidationError[];
+  warnings: ValidationError[];
 }
 
 export interface ScanDiagnostics {

@@ -54,7 +54,7 @@ function getFailedTasks(repoPath: string): Array<{ taskId: string; state: string
     .map((t) => ({
       taskId: t.taskId,
       state: t.state,
-      summary: t.stderr.slice(0, 120) || t.validationErrors[0] || "No details",
+      summary: t.stderr.slice(0, 120) || t.validationErrors[0]?.message || "No details",
     }));
 }
 
@@ -126,6 +126,7 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
     scanPhase: latestRun?.phase || "idle",
     failedTasks: latestRun?.failedTaskCount || 0,
     incompleteModules: latestRun?.incompleteModuleCount || 0,
+    validationFailureCount: latestRun?.validationFailureCount || 0,
     skippedFiles: totalSkipped,
     skippedByReason: skippedCounts,
     agentFailedTasks: failedTasks.length,
@@ -194,6 +195,7 @@ export async function statusCommand(repoPath: string, options: { json?: boolean 
       console.log(`Modules: ${latestRun.modules.length} (${latestRun.modules.filter((m) => m.status === "complete").length} complete)`);
       console.log(`Incomplete modules: ${latestRun.incompleteModuleCount}`);
       console.log(`Failed tasks: ${latestRun.failedTaskCount}`);
+      console.log(`Validation failures: ${latestRun.validationFailureCount}`);
     }
   }
 }

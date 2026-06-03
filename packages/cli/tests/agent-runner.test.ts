@@ -6,6 +6,7 @@ import {
   ClaudeProvider,
   AgentRunner,
   RunStore,
+  ValidationError,
 } from "@codewiki/core";
 import { FakeProvider } from "@codewiki/core/testing";
 import type { RunTaskOptions } from "@codewiki/core";
@@ -50,7 +51,7 @@ describe("FakeProvider", () => {
     const result = await provider.runTask({ ...baseOptions, prompt: "FAKE:success hello world" });
     expect(result.exitCode).toBe(0);
     expect(result.state).toBe("success");
-    expect(result.stdout).toContain("Fake response");
+    expect(result.stdout).toContain("Analysis for");
     expect(result.retries).toBe(0);
   });
 
@@ -66,7 +67,8 @@ describe("FakeProvider", () => {
     expect(result.exitCode).toBe(0);
     expect(result.state).toBe("failed");
     expect(result.validationErrors.length).toBeGreaterThan(0);
-    expect(result.validationErrors[0]).toContain("schema");
+    expect(result.validationErrors[0].code).toBe("SCHEMA_ERROR");
+    expect(result.validationErrors[0].message).toContain("schema");
   });
 
   it("returns timeout state for FAKE:timeout", async () => {
@@ -333,7 +335,7 @@ describe("RunStore", () => {
       stderr: "",
       durationMs: 100,
       retries: 0,
-      validationErrors: [],
+      validationErrors: [] as ValidationError[],
       startedAt: new Date().toISOString(),
       completedAt: new Date().toISOString(),
     };
