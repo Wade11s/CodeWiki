@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
   Artifact,
@@ -11,6 +11,13 @@ import type {
   Import,
   Module,
 } from "./types.js";
+import {
+  OverviewDataSchema,
+  ModuleDataSchema,
+  FeatureDataSchema,
+  CodeMapDataSchema,
+} from "./schema.js";
+import type { ZodSchema, ZodError } from "zod";
 
 function err(code: string, path: string, message: string): ValidationError {
   return { code, path, message };
@@ -71,11 +78,51 @@ function getEvidenceList(data: Record<string, unknown>): Evidence[] {
   return [];
 }
 
+function formatZodError(error: ZodError): string {
+  return error.issues.map((issue) => `${issue.path.join(".") || "root"}: ${issue.message}`).join("; ");
+}
+
+const artifactDataSchemaMap: Record<string, ZodSchema> = {
+  overview: OverviewDataSchema,
+  module: ModuleDataSchema,
+  feature: FeatureDataSchema,
+  "code-map": CodeMapDataSchema,
+};
+
+function validateArtifactData(
+  data: unknown,
+  errors: ValidationError[]
+): void {
+  if (!isValidArtifactType(data)) {
+    errors.push(err("INVALID_DATA_SCHEMA", "data", "Artifact data must be an object"));
+    return;
+  }
+
+  const type = data.type;
+  if (typeof type !== "string") {
+    errors.push(err("MISSING_ARTIFACT_TYPE", "data.type", "Artifact data must have a string type field"));
+    return;
+  }
+
+  const schema = artifactDataSchemaMap[type];
+  if (!schema) {
+    // Unknown type — deferred to allowedTypes check
+    return;
+  }
+
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    errors.push(
+      err("INVALID_DATA_SCHEMA", "data", `Schema validation failed for type "${type}": ${formatZodError(result.error)}`)
+    );
+  }
+}
+
 export function validateArtifact(
   artifact: Artifact,
   snapshotId: string,
   indexFacts: IndexFacts,
-  options?: { requireEvidence?: boolean; allowedTypes?: string[] }
+  options?: { requireEvidence?: boolean; allowedTypes?: string[]; validateDataSchema?: boolean }
 ): ArtifactValidationResult {
   const errors: ValidationError[] = [];
   const warnings: ValidationError[] = [];
@@ -110,6 +157,11 @@ export function validateArtifact(
     if ("type" in data && !options.allowedTypes.includes(data.type as string)) {
       errors.push(err("DISALLOWED_TYPE", "data.type", `Disallowed artifact type: ${data.type}`));
     }
+  }
+
+  // ── Data schema validation ──
+  if (options?.validateDataSchema) {
+    validateArtifactData(artifact.data, errors);
   }
 
   // ── Evidence validation ──
@@ -239,4 +291,38 @@ function validateEvidence(
       }
     }
   }
+}
+
+export interface InvalidArtifactRecord {
+  artifact: Artifact;
+  validatedAt: string;
+  snapshotId: string;
+  errors: ValidationError[];
+  warnings: ValidationError[];
+}
+
+export function writeInvalidArtifact(
+  codewikiDir: string,
+  artifact: Artifact,
+  validationResult: ArtifactValidationResult,
+  snapshotId: string
+): string {
+  const diagnosticsDir = join(codewikiDir, "diagnostics");
+  mkdirSync(diagnosticsDir, { recursive: true });
+
+  const record: InvalidArtifactRecord = {
+    artifact,
+    validatedAt: new Date().toISOString(),
+    snapshotId,
+    errors: validationResult.errors,
+    warnings: validationResult.warnings,
+  };
+
+  const type = typeof artifact.data === "object" && artifact.data !== null
+    ? (artifact.data as Record<string, unknown>).type || "unknown"
+    : "unknown";
+  const filename = `invalid-${type}-${Date.now()}.json`;
+  const filePath = join(diagnosticsDir, filename);
+  writeFileSync(filePath, JSON.stringify(record, null, 2));
+  return filePath;
 }

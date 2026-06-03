@@ -21,6 +21,7 @@ export class FakeProvider implements AgentProvider {
   name: string;
   private retryCounters = new Map<string, number>();
   private behavior: "default" | "validate" = "default";
+  private snapshotId: string | null = null;
 
   constructor(name = "fake") {
     this.name = name;
@@ -28,6 +29,14 @@ export class FakeProvider implements AgentProvider {
 
   setBehavior(behavior: "default" | "validate"): void {
     this.behavior = behavior;
+  }
+
+  setSnapshotId(id: string): void {
+    this.snapshotId = id;
+  }
+
+  private getSnapshotId(fallback: string): string {
+    return this.snapshotId ?? fallback;
   }
 
   async detect(): Promise<DetectedAgent | null> {
@@ -141,7 +150,7 @@ export class FakeProvider implements AgentProvider {
         durationMs: 10,
         stdout: JSON.stringify({
           schemaVersion: "1.0.0",
-          snapshotId: "snap-overview",
+          snapshotId: this.getSnapshotId("snap-overview"),
           generatedAt: new Date().toISOString(),
           data: {
             type: "overview",
@@ -167,7 +176,7 @@ export class FakeProvider implements AgentProvider {
         durationMs: 10,
         stdout: JSON.stringify({
           schemaVersion: "1.0.0",
-          snapshotId: "snap-module",
+          snapshotId: this.getSnapshotId("snap-module"),
           generatedAt: new Date().toISOString(),
           data: {
             type: "module",
@@ -199,7 +208,7 @@ export class FakeProvider implements AgentProvider {
         durationMs: 10,
         stdout: JSON.stringify({
           schemaVersion: "1.0.0",
-          snapshotId: "snap-feature",
+          snapshotId: this.getSnapshotId("snap-feature"),
           generatedAt: new Date().toISOString(),
           data: {
             type: "feature",
@@ -231,7 +240,7 @@ export class FakeProvider implements AgentProvider {
         durationMs: 10,
         stdout: JSON.stringify({
           schemaVersion: "1.0.0",
-          snapshotId: "snap-codemap",
+          snapshotId: this.getSnapshotId("snap-codemap"),
           generatedAt: new Date().toISOString(),
           data: {
             type: "code-map",
@@ -252,7 +261,7 @@ export class FakeProvider implements AgentProvider {
         exitCode: 0,
         durationMs: 10,
         stdout: JSON.stringify({
-          snapshotId: "snap-invalid",
+          snapshotId: this.getSnapshotId("snap-invalid"),
           generatedAt: new Date().toISOString(),
           data: { type: "unknown-type", value: 42 },
         }),
@@ -270,7 +279,7 @@ export class FakeProvider implements AgentProvider {
         durationMs: 10,
         stdout: JSON.stringify({
           schemaVersion: "1.0.0",
-          snapshotId: "snap-bad",
+          snapshotId: this.getSnapshotId("snap-bad"),
           generatedAt: new Date().toISOString(),
           data: {
             type: "module",

@@ -11,7 +11,7 @@ import type {
   Snapshot,
 } from "./types.js";
 import { AgentRunner } from "./agent-runner.js";
-import { validateArtifact, loadIndexFacts } from "./validation.js";
+import { validateArtifact, loadIndexFacts, writeInvalidArtifact } from "./validation.js";
 import type { ValidationError } from "./types.js";
 
 export function partitionModules(files: string[]): ModulePartition[] {
@@ -322,6 +322,7 @@ Produce JSON with:
     const indexFacts = loadIndexFacts(codewikiDir) || { symbols: [], imports: [], blocks: [], modules: [] };
     const validation = validateArtifact(artifact, snapshot.id, indexFacts, {
       requireEvidence: true,
+      validateDataSchema: true,
     });
 
     taskRecord.validationErrors = validation.errors;
@@ -332,6 +333,7 @@ Produce JSON with:
       runRecord.validationFailureCount++;
       modResult.status = "incomplete";
       modResult.diagnostics.push(`Validation failed: ${validation.errors.map((e) => `[${e.code}] ${e.message}`).join("; ")}`);
+      writeInvalidArtifact(codewikiDir, artifact, validation, snapshot.id);
       continue;
     }
 

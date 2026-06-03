@@ -1,7 +1,11 @@
 import { describe, it, expect } from "bun:test";
+import { mkdtempSync, rmSync, existsSync, readFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   validateArtifact,
   loadIndexFacts,
+  writeInvalidArtifact,
 } from "../src/validation.js";
 import type {
   Artifact,
@@ -362,6 +366,244 @@ describe("validateArtifact - type restrictions", () => {
       allowedTypes: ["overview", "module"],
     });
     expect(result.valid).toBe(true);
+  });
+});
+
+describe("validateArtifact - data schema validation", () => {
+  const snapshotId = "snap-123";
+  const indexFacts = makeIndexFacts();
+
+  it("accepts valid overview data schema", () => {
+    const artifact = makeArtifact({
+      data: {
+        type: "overview",
+        summary: "Test overview",
+        modulesAnalyzed: 1,
+        modulesComplete: 1,
+        modulesFailed: 0,
+        totalFiles: 5,
+        skippedFiles: 0,
+      },
+    });
+    const result = validateArtifact(artifact, snapshotId, indexFacts, { validateDataSchema: true });
+    expect(result.valid).toBe(true);
+    expect(result.errors).toEqual([]);
+  });
+
+  it("rejects invalid overview data schema (missing summary)", () => {
+    const artifact = makeArtifact({
+      data: {
+        type: "overview",
+        modulesAnalyzed: 1,
+        modulesComplete: 1,
+        modulesFailed: 0,
+        totalFiles: 5,
+        skippedFiles: 0,
+      },
+    });
+    const result = validateArtifact(artifact, snapshotId, indexFacts, { validateDataSchema: true });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.code === "INVALID_DATA_SCHEMA")).toBe(true);
+  });
+
+  it("accepts valid module data schema", () => {
+    const artifact = makeArtifact({
+      data: {
+        type: "module",
+        name: "core",
+        summary: "Core module",
+        keyFeatures: ["indexing"],
+        complexity: "medium",
+        claims: [
+          {
+            statement: "Does indexing",
+            evidence: [{ filePath: "src/index.ts", lineStart: 1, lineEnd: 2, snippet: "x" }],
+          },
+        ],
+      },
+    });
+    const result = validateArtifact(artifact, snapshotId, indexFacts, { validateDataSchema: true });
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects invalid module data schema (missing claims)", () => {
+    const artifact = makeArtifact({
+      data: {
+        type: "module",
+        name: "core",
+        summary: "Core module",
+        keyFeatures: ["indexing"],
+        complexity: "medium",
+      },
+    });
+    const result = validateArtifact(artifact, snapshotId, indexFacts, { validateDataSchema: true });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.code === "INVALID_DATA_SCHEMA")).toBe(true);
+  });
+
+  it("accepts valid feature data schema", () => {
+    const artifact = makeArtifact({
+      data: {
+        type: "feature",
+        id: "feat-1",
+        category: "cli",
+        name: "scan command",
+        claims: [
+          {
+            statement: "Scans files",
+            evidence: [{ filePath: "src/index.ts", lineStart: 1, lineEnd: 2, snippet: "x" }],
+          },
+        ],
+      },
+    });
+    const result = validateArtifact(artifact, snapshotId, indexFacts, { validateDataSchema: true });
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects invalid feature data schema (missing id)", () => {
+    const artifact = makeArtifact({
+      data: {
+        type: "feature",
+        category: "cli",
+        name: "scan command",
+        claims: [],
+      },
+    });
+    const result = validateArtifact(artifact, snapshotId, indexFacts, { validateDataSchema: true });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.code === "INVALID_DATA_SCHEMA")).toBe(true);
+  });
+
+  it("accepts valid code-map data schema", () => {
+    const artifact = makeArtifact({
+      data: {
+        type: "code-map",
+        files: [{ path: "src/index.ts", module: "core" }],
+        modules: [{ name: "core", type: "package", fileCount: 3 }],
+      },
+    });
+    const result = validateArtifact(artifact, snapshotId, indexFacts, { validateDataSchema: true });
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects invalid code-map data schema (missing files)", () => {
+    const artifact = makeArtifact({
+      data: {
+        type: "code-map",
+        modules: [{ name: "core", type: "package", fileCount: 3 }],
+      },
+    });
+    const result = validateArtifact(artifact, snapshotId, indexFacts, { validateDataSchema: true });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.code === "INVALID_DATA_SCHEMA")).toBe(true);
+  });
+
+  it("rejects feature claims without evidence when requireEvidence is true", () => {
+    const artifact = makeArtifact({
+      data: {
+        type: "feature",
+        id: "feat-1",
+        category: "cli",
+        name: "scan command",
+        claims: [
+          {
+            statement: "This feature claim has no evidence",
+            evidence: [],
+          },
+        ],
+      },
+    });
+    const result = validateArtifact(artifact, snapshotId, indexFacts, {
+      requireEvidence: true,
+      validateDataSchema: true,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.code === "MISSING_CLAIM_EVIDENCE")).toBe(true);
+  });
+
+  it("rejects feature claim with missing evidence field", () => {
+    const artifact = makeArtifact({
+      data: {
+        type: "feature",
+        id: "feat-1",
+        category: "cli",
+        name: "scan command",
+        claims: [
+          {
+            statement: "This feature claim has no evidence field",
+          },
+        ],
+      },
+    });
+    const result = validateArtifact(artifact, snapshotId, indexFacts, {
+      requireEvidence: true,
+      validateDataSchema: true,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.code === "MISSING_CLAIM_EVIDENCE")).toBe(true);
+  });
+
+  it("rejects data that is not an object", () => {
+    const artifact = makeArtifact({ data: "not-an-object" });
+    const result = validateArtifact(artifact, snapshotId, indexFacts, { validateDataSchema: true });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.code === "INVALID_DATA_SCHEMA")).toBe(true);
+  });
+
+  it("rejects data missing type field", () => {
+    const artifact = makeArtifact({ data: { summary: "no type" } });
+    const result = validateArtifact(artifact, snapshotId, indexFacts, { validateDataSchema: true });
+    expect(result.valid).toBe(false);
+    expect(result.errors.some((e) => e.code === "MISSING_ARTIFACT_TYPE")).toBe(true);
+  });
+});
+
+describe("writeInvalidArtifact", () => {
+  function createTempDir(name: string): string {
+    return mkdtempSync(join(tmpdir(), `codewiki-validation-${name}-`));
+  }
+
+  function cleanup(dir: string): void {
+    if (existsSync(dir)) {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  it("writes invalid artifact record to diagnostics directory", () => {
+    const dir = createTempDir("diag");
+    const artifact = makeArtifact({
+      data: { type: "overview", summary: "test" },
+    });
+    const validationResult = {
+      valid: false,
+      errors: [{ code: "TEST_ERROR", path: "data", message: "Test error" }],
+      warnings: [],
+    };
+
+    const filePath = writeInvalidArtifact(dir, artifact, validationResult, "snap-123");
+
+    expect(existsSync(filePath)).toBe(true);
+    const raw = readFileSync(filePath, "utf-8");
+    const record = JSON.parse(raw);
+    expect(record.artifact).toEqual(artifact);
+    expect(record.snapshotId).toBe("snap-123");
+    expect(record.errors).toEqual(validationResult.errors);
+    expect(record.warnings).toEqual(validationResult.warnings);
+    expect(record.validatedAt).toBeString();
+
+    cleanup(dir);
+  });
+
+  it("creates diagnostics directory if it does not exist", () => {
+    const dir = createTempDir("newdiag");
+    const artifact = makeArtifact({ data: {} });
+    const validationResult = { valid: false, errors: [], warnings: [] };
+
+    const filePath = writeInvalidArtifact(dir, artifact, validationResult, "snap-456");
+    expect(existsSync(join(dir, "diagnostics"))).toBe(true);
+    expect(existsSync(filePath)).toBe(true);
+
+    cleanup(dir);
   });
 });
 
