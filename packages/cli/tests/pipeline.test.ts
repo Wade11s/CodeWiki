@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { scanCommand } from "../src/commands/scan.js";
 import { statusCommand } from "../src/commands/status.js";
 import { debugCommand } from "../src/commands/debug.js";
-import { AgentRunner, FakeProvider, partitionModules, type AgentProvider, type TaskResult } from "@codewiki/core";
+import { AgentRunner, FakeProvider, partitionModules, type AgentProvider, type TaskResult, type ValidationError } from "@codewiki/core";
 
 function createTempRepo(name: string): string {
   const dir = mkdtempSync(join(tmpdir(), `codewiki-pipeline-${name}-`));
@@ -67,7 +67,7 @@ class SelectiveFakeProvider implements AgentProvider {
         stdout: "",
         stderr: `Simulated failure for module ${moduleName}`,
         retries: 0,
-        validationErrors: [],
+        validationErrors: [] as ValidationError[],
       };
     }
 
@@ -83,14 +83,14 @@ class SelectiveFakeProvider implements AgentProvider {
           stdout: "",
           stderr: `Flaky attempt ${current} for ${moduleName}`,
           retries: 0,
-          validationErrors: [],
+          validationErrors: [] as ValidationError[],
         };
       }
     }
 
     const evidence = this.invalidEvidenceModules.has(moduleName)
       ? [{ filePath: "", lineStart: 1, lineEnd: 5, snippet: "bad evidence" }]
-      : [{ filePath: "src/example.ts", lineStart: 1, lineEnd: 5, snippet: "export const x = 1;" }];
+      : [{ filePath: options.inputArtifacts[0] || "src/example.ts", lineStart: 1, lineEnd: 1, snippet: "export const x = 1;" }];
 
     return {
       taskId: `ok-${Date.now()}`,
@@ -104,7 +104,7 @@ class SelectiveFakeProvider implements AgentProvider {
       }),
       stderr: "",
       retries: 0,
-      validationErrors: [],
+      validationErrors: [] as ValidationError[],
     };
   }
 }

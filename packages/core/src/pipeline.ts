@@ -11,7 +11,8 @@ import type {
   Snapshot,
 } from "./types.js";
 import { AgentRunner } from "./agent-runner.js";
-import { validateArtifact } from "./validation.js";
+import { validateArtifact, loadIndexFacts } from "./validation.js";
+import type { ValidationError } from "./types.js";
 
 export function partitionModules(files: string[]): ModulePartition[] {
   // Collect all directories that contain a package.json
@@ -163,6 +164,7 @@ export function createRunRecord(
     skippedFiles: [],
     failedTaskCount: 0,
     incompleteModuleCount: modules.length,
+    validationFailureCount: 0,
     config,
   };
 }
@@ -295,7 +297,7 @@ Produce JSON with:
       error: result.exitCode !== 0 ? result.stderr : null,
       stdout: result.stdout,
       stderr: result.stderr,
-      validationErrors: [],
+      validationErrors: [] as ValidationError[],
     };
 
     if (result.exitCode !== 0) {
@@ -315,7 +317,10 @@ Produce JSON with:
     }
 
     const artifact = createArtifact(snapshot.id, "module-summary", artifactData);
-    const validation = validateArtifact(artifact, snapshot.id, {
+
+    // Load index facts for evidence resolution
+    const indexFacts = loadIndexFacts(codewikiDir) || { symbols: [], imports: [], blocks: [], modules: [] };
+    const validation = validateArtifact(artifact, snapshot.id, indexFacts, {
       requireEvidence: true,
     });
 
@@ -324,8 +329,9 @@ Produce JSON with:
     writeTaskRecord(codewikiDir, runRecord.runId, taskRecord);
 
     if (!validation.valid) {
+      runRecord.validationFailureCount++;
       modResult.status = "incomplete";
-      modResult.diagnostics.push(`Validation failed: ${validation.errors.join("; ")}`);
+      modResult.diagnostics.push(`Validation failed: ${validation.errors.map((e) => `[${e.code}] ${e.message}`).join("; ")}`);
       continue;
     }
 
@@ -343,6 +349,10 @@ Produce JSON with:
   const artifactsDir = join(codewikiDir, "artifacts");
   mkdirSync(artifactsDir, { recursive: true });
 
+  // Synthetic artifacts are system-generated and don't require evidence,
+  // but we still validate envelope fields and snapshot binding.
+  const indexFactsForSynthetic = loadIndexFacts(codewikiDir) || { symbols: [], imports: [], blocks: [], modules: [] };
+
   const overviewArtifact = createArtifact(snapshot.id, "overview", {
     summary: `Repository overview for ${basename(repoPath)}`,
     modulesAnalyzed: modules.length,
@@ -351,18 +361,30 @@ Produce JSON with:
     totalFiles: files.length,
     skippedFiles: skippedFiles.length,
   });
+  const overviewValidation = validateArtifact(overviewArtifact, snapshot.id, indexFactsForSynthetic, { requireEvidence: false });
+  if (!overviewValidation.valid) {
+    runRecord.validationFailureCount++;
+  }
   allArtifacts.push(overviewArtifact);
 
   const featuresArtifact = createArtifact(snapshot.id, "features", {
     candidates: featureCandidates,
     total: featureCandidates.length,
   });
+  const featuresValidation = validateArtifact(featuresArtifact, snapshot.id, indexFactsForSynthetic, { requireEvidence: false });
+  if (!featuresValidation.valid) {
+    runRecord.validationFailureCount++;
+  }
   allArtifacts.push(featuresArtifact);
 
   const codeMapArtifact = createArtifact(snapshot.id, "code-map", {
     files: files.map((f) => ({ path: f, module: modules.find((m) => m.files.includes(f))?.name || "unknown" })),
     modules: modules.map((m) => ({ name: m.name, type: m.type, fileCount: m.files.length })),
   });
+  const codeMapValidation = validateArtifact(codeMapArtifact, snapshot.id, indexFactsForSynthetic, { requireEvidence: false });
+  if (!codeMapValidation.valid) {
+    runRecord.validationFailureCount++;
+  }
   allArtifacts.push(codeMapArtifact);
 
   writeFileSync(

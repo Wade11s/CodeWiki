@@ -111,6 +111,11 @@ function writeIndexArtifacts(
     join(indexDir, "skipped-files.json"),
     JSON.stringify(envelope(skipped), null, 2)
   );
+
+  writeFileSync(
+    join(indexDir, "modules.json"),
+    JSON.stringify(envelope(indexerResult.modules), null, 2)
+  );
 }
 
 function writeArtifactFiles(

@@ -65,7 +65,61 @@ export const EvidenceSchema = z.object({
   lineEnd: z.number().int().min(1),
   snippet: z.string(),
   symbol: z.string().optional(),
+  blockId: z.string().optional(),
   relatedSymbols: z.array(z.string()).optional(),
+});
+
+export const ClaimSchema = z.object({
+  statement: z.string(),
+  evidence: z.array(EvidenceSchema),
+});
+
+export const OverviewDataSchema = z.object({
+  type: z.literal("overview"),
+  summary: z.string(),
+  modulesAnalyzed: z.number().int().min(0),
+  modulesComplete: z.number().int().min(0),
+  modulesFailed: z.number().int().min(0),
+  totalFiles: z.number().int().min(0),
+  skippedFiles: z.number().int().min(0),
+  claims: z.array(ClaimSchema).optional(),
+});
+
+export const ModuleDataSchema = z.object({
+  type: z.literal("module"),
+  name: z.string(),
+  summary: z.string(),
+  keyFeatures: z.array(z.string()),
+  complexity: z.enum(["low", "medium", "high"]),
+  claims: z.array(ClaimSchema),
+});
+
+export const FeatureDataSchema = z.object({
+  type: z.literal("feature"),
+  id: z.string(),
+  category: z.string(),
+  name: z.string(),
+  description: z.string().optional(),
+  claims: z.array(ClaimSchema),
+});
+
+export const CodeMapDataSchema = z.object({
+  type: z.literal("code-map"),
+  files: z.array(z.object({ path: z.string(), module: z.string() })),
+  modules: z.array(z.object({ name: z.string(), type: z.string(), fileCount: z.number().int().min(0) })),
+  claims: z.array(ClaimSchema).optional(),
+});
+
+export const ValidationErrorSchema = z.object({
+  code: z.string(),
+  path: z.string(),
+  message: z.string(),
+});
+
+export const ValidationResultSchema = z.object({
+  valid: z.boolean(),
+  errors: z.array(ValidationErrorSchema),
+  warnings: z.array(ValidationErrorSchema),
 });
 
 export const HealthStatusSchema = z.enum(["healthy", "degraded", "unavailable"]);
@@ -124,7 +178,7 @@ export const TaskResultSchema = z.object({
   stdout: z.string(),
   stderr: z.string(),
   retries: z.number().int().min(0),
-  validationErrors: z.array(z.string()),
+  validationErrors: z.array(ValidationErrorSchema),
   state: TaskStateSchema,
 });
 
@@ -139,7 +193,7 @@ export const TaskRunRecordSchema = z.object({
   stderr: z.string(),
   durationMs: z.number().int().min(0),
   retries: z.number().int().min(0),
-  validationErrors: z.array(z.string()),
+  validationErrors: z.array(ValidationErrorSchema),
   startedAt: z.string().datetime(),
   completedAt: z.string().datetime(),
 });
@@ -244,4 +298,17 @@ export const IndexerResultSchema = z.object({
   imports: z.array(ImportSchema),
   blocks: z.array(BlockSchema),
   modules: z.array(ModuleSchema),
+});
+
+export const IndexFactsSchema = z.object({
+  symbols: z.array(CodeSymbolSchema),
+  imports: z.array(ImportSchema),
+  blocks: z.array(BlockSchema),
+  modules: z.array(ModuleSchema),
+});
+
+export const ArtifactValidationResultSchema = z.object({
+  valid: z.boolean(),
+  errors: z.array(ValidationErrorSchema),
+  warnings: z.array(ValidationErrorSchema),
 });

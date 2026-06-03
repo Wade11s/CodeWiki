@@ -111,7 +111,7 @@ export async function debugCommand(
         status: t.status,
         durationMs: t.durationMs,
         retriesUsed: t.retriesUsed,
-        validationErrors: t.validationErrors,
+        validationErrors: t.validationErrors.map((e) => ({ code: e.code, path: e.path, message: e.message })),
       })),
       skippedFiles: latestRun.skippedFiles,
     };

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, writeFileSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
-import type { AgentProvider, TaskResult, DetectedAgent, RunRecord, TaskRunRecord, TaskState } from "./types.js";
+import type { AgentProvider, TaskResult, DetectedAgent, RunRecord, TaskRunRecord, TaskState, ValidationError } from "./types.js";
 import { FakeProvider } from "./testing.js";
 
 // --- Claude Provider ---
@@ -71,21 +71,21 @@ export class ClaudeProvider implements AgentProvider {
           stdout: result.stdout || "",
           stderr: `Task timed out after ${options.timeoutSeconds}s`,
           retries: 0,
-          validationErrors: [],
+          validationErrors: [] as ValidationError[],
           state: "timeout",
         };
       }
 
-      const validationErrors: string[] = [];
+      const validationErrors: ValidationError[] = [];
       if (result.status === 0 && options.outputSchema) {
         try {
           const parsed = JSON.parse(result.stdout);
           // Basic schema validation: ensure output is an object
           if (typeof parsed !== "object" || parsed === null) {
-            validationErrors.push("Output does not match schema: expected object");
+            validationErrors.push({ code: "SCHEMA_ERROR", path: "stdout", message: "Output does not match schema: expected object" });
           }
         } catch {
-          validationErrors.push("Output does not match schema: invalid JSON");
+          validationErrors.push({ code: "SCHEMA_ERROR", path: "stdout", message: "Output does not match schema: invalid JSON" });
         }
       }
 
@@ -110,7 +110,7 @@ export class ClaudeProvider implements AgentProvider {
         stdout: "",
         stderr: error instanceof Error ? error.message : String(error),
         retries: 0,
-        validationErrors: [],
+        validationErrors: [] as ValidationError[],
         state: "failed",
       };
     }
@@ -270,7 +270,7 @@ export async function runTaskWithRetry(
       stdout: "",
       stderr: err instanceof Error ? err.message : String(err),
       retries: 0,
-      validationErrors: [],
+      validationErrors: [] as ValidationError[],
       state: "failed" as TaskState,
     }));
 
@@ -303,7 +303,7 @@ export async function runTaskWithRetry(
         stdout: "",
         stderr: errorMsg,
         retries: attempt,
-        validationErrors: [],
+        validationErrors: [] as ValidationError[],
         state: "timeout" as TaskState,
       };
     }
@@ -384,7 +384,7 @@ export class AgentRunner {
           stdout: "",
           stderr: error instanceof Error ? error.message : String(error),
           retries: attempt - 1,
-          validationErrors: [],
+          validationErrors: [] as ValidationError[],
           state: "failed" as TaskState,
         };
       }
@@ -397,7 +397,7 @@ export class AgentRunner {
       stdout: "",
       stderr: "No result produced",
       retries: attempt - 1,
-      validationErrors: ["No result produced after all attempts"],
+      validationErrors: [{ code: "NO_RESULT", path: "task", message: "No result produced after all attempts" }],
       state: "failed" as TaskState,
     };
 
@@ -507,7 +507,7 @@ export class AgentRunner {
           stdout: "",
           stderr: `Task timed out after ${options.timeoutSeconds}s`,
           retries: 0,
-          validationErrors: [],
+          validationErrors: [] as ValidationError[],
           state: "timeout" as TaskState,
         });
       }, timeoutMs);
