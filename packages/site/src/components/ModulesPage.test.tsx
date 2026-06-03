@@ -70,4 +70,59 @@ describe("ModulesPage", () => {
     expect(html).toContain("NoDeps");
     expect(html).not.toContain("Dependencies:");
   });
+
+  it("shows complexity badge when present", () => {
+    const data: ModulesData = [
+      {
+        name: "HighComplexity",
+        path: "src/hc.ts",
+        summary: "Complex.",
+        complexity: "high",
+      },
+      {
+        name: "LowComplexity",
+        path: "src/lc.ts",
+        summary: "Simple.",
+        complexity: "low",
+      },
+    ];
+    const html = renderToString(<ModulesPage data={data} />);
+    expect(html).toContain("high");
+    expect(html).toContain("low");
+  });
+
+  it("renders key features when present", () => {
+    const data: ModulesData = [
+      {
+        name: "Core",
+        path: "src/core.ts",
+        summary: "Core module.",
+        keyFeatures: ["scanning", "indexing"],
+      },
+    ];
+    const html = renderToString(<ModulesPage data={data} />);
+    expect(html).toContain("scanning");
+    expect(html).toContain("indexing");
+  });
+
+  it("renders claims with evidence", () => {
+    const data: ModulesData = [
+      {
+        name: "Core",
+        path: "src/core.ts",
+        summary: "Core module.",
+        claims: [
+          {
+            statement: "Exports a scanner.",
+            evidence: [
+              { filePath: "src/core.ts", lineStart: 5, lineEnd: 7, snippet: "export" },
+            ],
+          },
+        ],
+      },
+    ];
+    const html = renderToString(<ModulesPage data={data} />);
+    expect(html).toContain("Exports a scanner.");
+    expect(html).toContain("src/core.ts:5-7");
+  });
 });

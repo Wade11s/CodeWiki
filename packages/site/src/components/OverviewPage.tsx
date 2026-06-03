@@ -1,7 +1,9 @@
-import type { OverviewData } from "../types.js";
+import type { OverviewData, Evidence } from "../types.js";
+import ClaimsList from "./ClaimsList.js";
 
 interface Props {
   data: OverviewData | null;
+  onSelectEvidence?: (ev: Evidence) => void;
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -32,7 +34,46 @@ function EmptyState({ message }: { message: string }) {
   );
 }
 
-export default function OverviewPage({ data }: Props) {
+function StatGrid({ data }: { data: OverviewData }) {
+  const stats: { label: string; value: number | undefined }[] = [
+    { label: "Modules analyzed", value: data.modulesAnalyzed },
+    { label: "Complete", value: data.modulesComplete },
+    { label: "Failed", value: data.modulesFailed },
+    { label: "Total files", value: data.totalFiles },
+    { label: "Skipped files", value: data.skippedFiles },
+  ];
+  const visible = stats.filter((s) => typeof s.value === "number");
+  if (visible.length === 0) return null;
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gridTemplateColumns: "repeat(auto-fill, minmax(140px, 1fr))",
+        gap: "0.75rem",
+        marginBottom: "2rem",
+      }}
+    >
+      {visible.map((s) => (
+        <div
+          key={s.label}
+          style={{
+            padding: "0.875rem 1rem",
+            background: "#f8fafc",
+            border: "1px solid #e2e8f0",
+            borderRadius: "0.375rem",
+            textAlign: "center",
+          }}
+        >
+          <div style={{ fontSize: "1.25rem", fontWeight: 700, color: "#1e293b" }}>{s.value}</div>
+          <div style={{ fontSize: "0.75rem", color: "#64748b", marginTop: "0.25rem" }}>{s.label}</div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export default function OverviewPage({ data, onSelectEvidence }: Props) {
   if (!data) {
     return (
       <div style={{ padding: "2rem" }}>
@@ -47,7 +88,9 @@ export default function OverviewPage({ data }: Props) {
     data.architecture ||
     (data.technologyStack && data.technologyStack.length > 0) ||
     (data.entryPoints && data.entryPoints.length > 0) ||
-    data.runModel;
+    data.runModel ||
+    (data.claims && data.claims.length > 0) ||
+    typeof data.modulesAnalyzed === "number";
 
   return (
     <div style={{ padding: "2rem", maxWidth: "900px" }}>
@@ -56,6 +99,8 @@ export default function OverviewPage({ data }: Props) {
       {!hasContent && (
         <EmptyState message="Overview artifact exists but contains no structured data yet." />
       )}
+
+      <StatGrid data={data} />
 
       {data.summary && (
         <Section title="Summary">
@@ -110,6 +155,12 @@ export default function OverviewPage({ data }: Props) {
       {data.runModel && (
         <Section title="Run Model">
           <p style={{ lineHeight: 1.6, color: "#334155", whiteSpace: "pre-wrap" }}>{data.runModel}</p>
+        </Section>
+      )}
+
+      {data.claims && data.claims.length > 0 && (
+        <Section title="Claims">
+          <ClaimsList claims={data.claims} onSelectEvidence={onSelectEvidence} />
         </Section>
       )}
     </div>
